@@ -219,13 +219,7 @@
             <div class="glass-card">
               <h3>🤖 AI Engine Configuration</h3>
               
-              <div class="form-group">
-                <label>Active Engine</label>
-                <select id="settings-ai-provider" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); color: var(--text-primary); border-radius: 8px;">
-                  <option value="groq">Groq Cloud (Fast, requires Internet)</option>
-                  <option value="local">Local GGUF (Private, Offline)</option>
-                </select>
-              </div>
+              
 
               <div id="settings-groq-block" class="form-group" style="margin-top: 15px;">
                 <label>Groq API Key</label>
@@ -236,11 +230,7 @@
                 <small>Get your free API key from <a href="https://console.groq.com/keys" target="_blank" id="apikey-link">Groq Cloud</a></small>
               </div>
 
-              <div id="settings-local-block" class="form-group" style="margin-top: 15px; display: none;">
-                <label>Local GGUF Model Path</label>
-                <input type="text" id="settings-modelpath" placeholder="C:\Data\SEXY\training\llama-3-8b-instruct.Q4_K_M.gguf">
-                <small>Enter the absolute path to your trained .gguf model.</small>
-              </div>
+              
             </div>
             <div class="glass-card">
               <h3>🔊 Voice Settings</h3>

@@ -75,7 +75,6 @@ const store = new Store({
 // ─────────────────────────────────────────────────────────────
 
 const DVSCGroq = require('./modules/groq');
-const DVSCLocal = require('./modules/local_llm');
 const ReminderManager = require('./modules/reminders');
 const TimetableManager = require('./modules/timetable');
 const DVSCTts = require('./modules/tts');
@@ -161,26 +160,12 @@ function initializeAI() {
   const settings = store.get('settings');
 
   try {
-    const provider = settings.aiProvider || 'groq';
-    if (provider === 'local') {
-      dvsc = new DVSCLocal();
-      if (settings.localModelPath) {
-        // Initialize asynchronously without blocking main thread
-        dvsc.initialize(settings.localModelPath).catch(err => {
-          console.error('[DVSC Local] Background init failed:', err);
-        });
-        console.log('[DVSC] Local Model initialization started in background.');
-      } else {
-        console.log('[DVSC] No Local Model Path found. Local AI not initialized.');
-      }
+    dvsc = new DVSCGroq();
+    if (settings.apiKey) {
+      dvsc.initialize(settings.apiKey);
+      console.log('[DVSC] Groq initialized.');
     } else {
-      dvsc = new DVSCGroq();
-      if (settings.apiKey) {
-        dvsc.initialize(settings.apiKey);
-        console.log('[DVSC] Groq initialized.');
-      } else {
-        console.log('[DVSC] No API key found. Groq not initialized.');
-      }
+      console.log('[DVSC] No API key found. Groq not initialized.');
     }
 
     // Migrate legacy chat history if it exists and no new chats exist

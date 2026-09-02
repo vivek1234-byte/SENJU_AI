@@ -952,11 +952,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Settings Logic
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const settingsAiProvider = document.getElementById('settings-ai-provider');
-  const settingsGroqBlock = document.getElementById('settings-groq-block');
-  const settingsLocalBlock = document.getElementById('settings-local-block');
-  const settingsModelpath = document.getElementById('settings-modelpath');
-  
+    const settingsGroqBlock = document.getElementById('settings-groq-block');
+      
   const settingsApikey = document.getElementById('settings-apikey');
   const toggleApikeyBtn = document.getElementById('toggle-apikey');
   
@@ -966,21 +963,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const restartAppBtn = document.getElementById('restart-app-btn');
   const clearChatBtn = document.getElementById('clear-chat-btn');
 
-  settingsAiProvider.addEventListener('change', (e) => {
-    if (e.target.value === 'groq') {
-      settingsGroqBlock.style.display = 'block';
-      settingsLocalBlock.style.display = 'none';
-    } else {
-      settingsGroqBlock.style.display = 'none';
-      settingsLocalBlock.style.display = 'block';
-    }
-  });
+    });
 
   function populateSettingsForm() {
-    settingsAiProvider.value = settings.aiProvider || 'groq';
-    settingsAiProvider.dispatchEvent(new Event('change'));
-    settingsModelpath.value = settings.localModelPath || '';
-    settingsApikey.value = settings.apiKey || '';
+                settingsApikey.value = settings.apiKey || '';
     settingsVoice.checked = settings.voiceEnabled;
     settingsLocation.checked = settings.locationEnabled;
   }
@@ -998,10 +984,7 @@ document.addEventListener('DOMContentLoaded', () => {
   saveSettingsBtn.addEventListener('click', async () => {
     const newSettings = {
       ...settings,
-      aiProvider: settingsAiProvider.value,
-      localModelPath: settingsModelpath.value.trim(),
-      apiKey: settingsApikey.value.trim(),
-      voiceEnabled: settingsVoice.checked,
+            voiceEnabled: settingsVoice.checked,
       locationEnabled: settingsLocation.checked
     };
     
