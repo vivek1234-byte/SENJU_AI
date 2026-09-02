@@ -963,8 +963,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const restartAppBtn = document.getElementById('restart-app-btn');
   const clearChatBtn = document.getElementById('clear-chat-btn');
 
-    });
-
   function populateSettingsForm() {
                 settingsApikey.value = settings.apiKey || '';
     settingsVoice.checked = settings.voiceEnabled;
