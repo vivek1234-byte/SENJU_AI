@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SENJU — Your Smart AI Companion</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/jarvis.css">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+  <!-- Boot Sequence Overlay -->
+  <div id="boot-overlay">
+    <div class="boot-content">
+      <div class="boot-logo">SENJU</div>
+      <div class="boot-subtitle">スマート・エキスパート・あなたの相棒</div>
+      <div class="boot-lines">
+        <div class="boot-line" data-delay="400">🌸 Initializing Neural Core...</div>
+        <div class="boot-line" data-delay="900">✨ Loading AI Engine... <span class="boot-status">ONLINE</span></div>
+        <div class="boot-line" data-delay="1400">🎙️ Voice Module... <span class="boot-status">ACTIVE</span></div>
+        <div class="boot-line" data-delay="1900">⏰ Reminder System... <span class="boot-status">READY</span></div>
+        <div class="boot-line" data-delay="2400">💕 Welcome back, Vivek~ 🌸</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-container">
+    <!-- Title Bar -->
+    <div id="title-bar">
+      <div class="title-bar-left">
+        <span class="title-logo">🌸</span>
+        <span class="title-text">SENJU</span>
+      </div>
+      <div class="title-bar-controls">
+        <button id="btn-minimize" class="title-btn">─</button>
+        <button id="btn-maximize" class="title-btn">□</button>
+        <button id="btn-close" class="title-btn btn-close">✕</button>
+      </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div id="main-layout">
+      <!-- Sidebar -->
+      <div id="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-icon">🌸</div>
+          <div class="brand-name">SENJU</div>
+          <div class="brand-tagline">Your Personal AI</div>
+        </div>
+        <nav class="sidebar-nav">
+          <button id="btn-new-chat" class="nav-item new-chat-btn">
+            <span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></span>
+            <span class="nav-text">New chat</span>
+          </button>
+          <button class="nav-item active" data-view="chat">
+            <span class="nav-icon">💬</span>
+            <span class="nav-text">Chat</span>
+          </button>
+          <button class="nav-item" data-view="reminders">
+            <span class="nav-icon">⏰</span>
+            <span class="nav-text">Reminders</span>
+          </button>
+          <button class="nav-item" data-view="timetable">
+            <span class="nav-icon">📅</span>
+            <span class="nav-text">Timetable</span>
+          </button>
+          <button class="nav-item" data-view="whatsapp">
+            <span class="nav-icon">📱</span>
+            <span class="nav-text">WhatsApp</span>
+          </button>
+          <button class="nav-item" data-view="settings">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-text">Settings</span>
+          </button>
+          <button class="nav-item" data-view="jarvis" id="btn-jarvis-mode" style="margin-top:8px; border:1px solid rgba(255,110,180,0.3); background:rgba(255,110,180,0.07);">
+            <span class="nav-icon">&#127800;</span>
+            <span class="nav-text" style="background:linear-gradient(90deg,#FF6EB4,#FF1493);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:800;">SENJU Mode</span>
+          </button>
+        </nav>
+        
+        <!-- Recent Chats Section -->
+        <div class="sidebar-recent-chats">
+          <div class="recent-chats-header">
+            <span>Recents</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div id="recent-chats-list" class="recent-chats-list">
+            <!-- Chat items will be injected here -->
+          </div>
+        </div>
+        <div class="sidebar-status">
+          <div class="status-dot"></div>
+          <span class="status-text">System Active</span>
+        </div>
+      </div>
+
+      <!-- Content Area -->
+      <div id="content-area">
+
+        <!-- Chat View -->
+        <div id="view-chat" class="view active">
+          <div id="chat-messages"></div>
+          <div id="chat-input-area">
+            <button id="add-btn" class="icon-btn" title="Add">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <input type="text" id="chat-input" placeholder="Ask anything" autocomplete="off">
+            <button id="voice-btn" class="icon-btn" title="Voice Input">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+            </button>
+            <button id="send-btn" class="action-btn" title="Send">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Reminders View -->
+        <div id="view-reminders" class="view">
+          <div class="view-header">
+            <h2>⏰ Reminders</h2>
+            <button id="add-reminder-btn" class="btn-primary">+ Add Reminder</button>
+          </div>
+          <div id="reminder-form" class="glass-card" style="display:none;">
+            <h3>🌸 New Reminder</h3>
+            <div class="form-group">
+              <label>Title</label>
+              <input type="text" id="reminder-title" placeholder="Reminder title...">
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <input type="text" id="reminder-desc" placeholder="Optional description...">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Date & Time</label>
+                <input type="datetime-local" id="reminder-datetime">
+              </div>
+              <div class="form-group">
+                <label>Repeat</label>
+                <select id="reminder-repeat">
+                  <option value="none">No Repeat</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button id="save-reminder-btn" class="btn-primary">Save Reminder</button>
+              <button id="cancel-reminder-btn" class="btn-ghost">Cancel</button>
+            </div>
+          </div>
+          <div id="reminders-list"></div>
+        </div>
+
+        <!-- Timetable View -->
+        <div id="view-timetable" class="view">
+          <div class="view-header">
+            <h2>📅 Timetable</h2>
+            <button id="add-timetable-btn" class="btn-primary">+ Add Entry</button>
+          </div>
+          <div id="timetable-form" class="glass-card" style="display:none;">
+            <h3>🌸 New Timetable Entry</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Day</label>
+                <select id="tt-day">
+                  <option value="monday">Monday</option>
+                  <option value="tuesday">Tuesday</option>
+                  <option value="wednesday">Wednesday</option>
+                  <option value="thursday">Thursday</option>
+                  <option value="friday">Friday</option>
+                  <option value="saturday">Saturday</option>
+                  <option value="sunday">Sunday</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Category</label>
+                <select id="tt-category">
+                  <option value="study">📚 Study</option>
+                  <option value="work">💼 Work</option>
+                  <option value="personal">🏠 Personal</option>
+                  <option value="health">💪 Health</option>
+                  <option value="other">📌 Other</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Start Time</label>
+                <input type="time" id="tt-start">
+              </div>
+              <div class="form-group">
+                <label>End Time</label>
+                <input type="time" id="tt-end">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Title</label>
+              <input type="text" id="tt-title" placeholder="What's this block for?">
+            </div>
+            <div class="form-actions">
+              <button id="save-tt-btn" class="btn-primary">Save Entry</button>
+              <button id="cancel-tt-btn" class="btn-ghost">Cancel</button>
+            </div>
+          </div>
+          <div id="timetable-grid"></div>
+        </div>
+
+        <!-- Settings View -->
+        <div id="view-settings" class="view">
+          <div class="view-header">
+            <h2>⚙️ Settings</h2>
+          </div>
+          <div class="settings-content">
+            <div class="glass-card">
+              <h3>🤖 AI Engine Configuration</h3>
+              
+              <div class="form-group">
+                <label>Active Engine</label>
+                <select id="settings-ai-provider" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); color: var(--text-primary); border-radius: 8px;">
+                  <option value="groq">Groq Cloud (Fast, requires Internet)</option>
+                  <option value="local">Local GGUF (Private, Offline)</option>
+                </select>
+              </div>
+
+              <div id="settings-groq-block" class="form-group" style="margin-top: 15px;">
+                <label>Groq API Key</label>
+                <div class="input-with-action">
+                  <input type="password" id="settings-apikey" placeholder="Enter your Groq API key...">
+                  <button id="toggle-apikey" class="btn-ghost">Show</button>
+                </div>
+                <small>Get your free API key from <a href="https://console.groq.com/keys" target="_blank" id="apikey-link">Groq Cloud</a></small>
+              </div>
+
+              <div id="settings-local-block" class="form-group" style="margin-top: 15px; display: none;">
+                <label>Local GGUF Model Path</label>
+                <input type="text" id="settings-modelpath" placeholder="C:\Data\SEXY\training\llama-3-8b-instruct.Q4_K_M.gguf">
+                <small>Enter the absolute path to your trained .gguf model.</small>
+              </div>
+            </div>
+            <div class="glass-card">
+              <h3>🔊 Voice Settings</h3>
+              <div class="form-group">
+                <label>Voice Output</label>
+                <div class="toggle-group">
+                  <label class="toggle">
+                    <input type="checkbox" id="settings-voice" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span>Enable voice responses</span>
+                </div>
+              </div>
+            </div>
+            <div class="glass-card">
+              <h3>📍 Privacy & Location</h3>
+              <div class="form-group">
+                <label>Location Access</label>
+                <div class="toggle-group">
+                  <label class="toggle">
+                    <input type="checkbox" id="settings-location">
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span>Allow SENJU to know your current location</span>
+                </div>
+              </div>
+            </div>
+            <div class="glass-card">
+              <h3>🗑️ Data Management</h3>
+              <button id="clear-chat-btn" class="btn-danger">Clear Chat History</button>
+            </div>
+            <div class="form-actions">
+              <button id="save-settings-btn" class="btn-primary">Save Settings</button>
+              <button id="restart-app-btn" class="btn-ghost" style="margin-left: 10px;">Restart App</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- WhatsApp View -->
+        <div id="view-whatsapp" class="view">
+          <div class="view-header">
+            <h2>📱 WhatsApp Integration</h2>
+          </div>
+          <div class="view-content" style="text-align: center; margin-top: 40px;">
+            <div class="glass-card" style="display: inline-block; padding: 40px; border-radius: 20px;">
+              <h3 style="margin-bottom: 20px;">Link Your Device</h3>
+              <p style="margin-bottom: 20px; color: var(--text-muted);">Scan this QR code using your phone's WhatsApp to enable sending messages via AI.</p>
+              
+              <div id="wa-qr-container">
+                <img id="whatsapp-qr-img" src="" alt="WhatsApp QR Code" style="margin: 20px 0; max-width: 250px; border-radius: 10px; display: none;">
+                <div id="whatsapp-loader" style="margin: 40px 0;">
+                  <div class="typing-indicator" style="justify-content: center;"><span></span><span></span><span></span></div>
+                </div>
+              </div>
+
+              <p id="whatsapp-status-text" style="color: var(--accent-secondary); font-weight: bold; margin-top: 10px;">Initializing WhatsApp...</p>
+              
+              <div id="wa-actions" style="margin-top: 30px; display: none;">
+                <button id="whatsapp-logout-btn" class="btn-danger">Logout / Disconnect</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       J.A.R.V.I.S — FULLSCREEN IMMERSIVE INTERFACE
+       ═══════════════════════════════════════════════════════ -->
+  <div id="jarvis-overlay">
+
+    <!-- Full background canvas — 3D sphere + particles -->
+    <canvas id="jarvis-bg-canvas"></canvas>
+
+    <!-- TOP HUD — thin bar -->
+    <div id="jhud-top">
+      <div id="jhud-logo">S E N J U</div>
+      <div id="jhud-center">
+        <div class="jhud-stat"><span class="jhud-val" id="jhud-time">00:00:00</span><span class="jhud-lbl">LOCAL TIME</span></div>
+        <div class="jhud-divider"></div>
+        <div class="jhud-stat"><span class="jhud-val" id="jhud-status-val">STANDBY</span><span class="jhud-lbl">SYSTEM STATUS</span></div>
+        <div class="jhud-divider"></div>
+        <div class="jhud-stat"><span class="jhud-val" id="jhud-mode-val">MOUSE</span><span class="jhud-lbl">CONTROL</span></div>
+      </div>
+      <button id="jarvis-close-btn">&#10005; EXIT</button>
+    </div>
+
+    <!-- CORNER HUD brackets -->
+    <div class="jhud-corner jtl">
+      <div class="jcorner-line jcl-h"></div>
+      <div class="jcorner-line jcl-v"></div>
+      <div class="jcorner-text">SYS.ONLINE</div>
+    </div>
+    <div class="jhud-corner jtr">
+      <div class="jcorner-line jcl-h" style="right:0;left:auto;"></div>
+      <div class="jcorner-line jcl-v" style="right:0;left:auto;"></div>
+      <div class="jcorner-text" style="right:18px;left:auto;">NEURAL.ACTIVE</div>
+    </div>
+    <div class="jhud-corner jbl">
+      <div class="jcorner-line jcl-h" style="bottom:0;top:auto;"></div>
+      <div class="jcorner-line jcl-v" style="bottom:0;top:auto;"></div>
+    </div>
+    <div class="jhud-corner jbr">
+      <div class="jcorner-line jcl-h" style="bottom:0;top:auto;right:0;left:auto;"></div>
+      <div class="jcorner-line jcl-v" style="bottom:0;top:auto;right:0;left:auto;"></div>
+    </div>
+
+    <!-- RIGHT PANEL — response text -->
+    <div id="jhud-right">
+      <div class="jright-title">SENJU RESPONSE</div>
+      <div id="jresponse-text">System initialized. Awaiting vocal command.</div>
+    </div>
+
+    <!-- BOTTOM — voice waveform + status -->
+    <div id="jhud-bottom">
+      <div id="jvoice-label" class="jvoice-idle">&#9679; VOICE ACTIVE — SPEAK ANYTIME</div>
+      <canvas id="jwave-canvas" width="500" height="48"></canvas>
+      <div id="jvoice-transcript"></div>
+    </div>
+
+  </div><!-- end #jarvis-overlay -->
+
+  <script src="renderer.js"></script>
+</body>
+</html>
+

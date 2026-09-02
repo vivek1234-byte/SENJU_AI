@@ -1,0 +1,317 @@
+/* ══════════════════════════════════════════════════════
+   SENJU AI — SENJU Immersive Mode
+   Fullscreen energy sphere, HUD overlays, auto-voice
+   ══════════════════════════════════════════════════════ */
+
+/* ── Base overlay ── */
+#jarvis-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: none;
+  background: #000408;
+  overflow: hidden;
+  font-family: 'Orbitron', monospace;
+}
+
+#jarvis-overlay.active { display: block; }
+
+/* ── Full bg canvas (sphere + particles) ── */
+#jarvis-bg-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+/* ══ TOP HUD BAR ══ */
+#jhud-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  background: linear-gradient(180deg, rgba(10,0,20,0.95) 0%, rgba(0,5,15,0.6) 100%);
+  border-bottom: 1px solid rgba(255,110,180,0.18);
+  z-index: 10;
+  backdrop-filter: blur(8px);
+}
+
+#jhud-logo {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 10px;
+  background: linear-gradient(90deg, #FF6EB4, #FF1493, #C71585, #FF6EB4);
+  background-size: 300% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: logoShimmer 4s linear infinite;
+}
+
+@keyframes logoShimmer {
+  0%   { background-position: 0% center; }
+  100% { background-position: 300% center; }
+}
+
+#jhud-center {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.jhud-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 24px;
+}
+
+.jhud-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #00D4FF;
+  letter-spacing: 2px;
+}
+
+.jhud-lbl {
+  font-size: 7px;
+  letter-spacing: 2.5px;
+  color: rgba(0,180,255,0.45);
+  margin-top: 2px;
+  text-transform: uppercase;
+}
+
+.jhud-divider {
+  width: 1px;
+  height: 28px;
+  background: rgba(255,110,180,0.2);
+}
+
+#jarvis-close-btn {
+  background: transparent;
+  border: 1px solid rgba(255,60,60,0.4);
+  color: rgba(255,100,100,0.8);
+  padding: 5px 14px;
+  font-family: 'Orbitron', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+
+#jarvis-close-btn:hover {
+  background: rgba(255,40,40,0.15);
+  border-color: rgba(255,80,80,0.8);
+  color: rgba(255,150,150,1);
+  box-shadow: 0 0 12px rgba(255,50,50,0.3);
+}
+
+/* ══ CORNER HUD BRACKETS ══ */
+.jhud-corner {
+  position: absolute;
+  width: 70px;
+  height: 70px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.jtl { top: 60px; left: 20px; }
+.jtr { top: 60px; right: 20px; }
+.jbl { bottom: 90px; left: 20px; }
+.jbr { bottom: 90px; right: 20px; }
+
+.jcorner-line {
+  position: absolute;
+  background: rgba(255,110,180,0.5);
+}
+
+.jcl-h { height: 1px; width: 40px; top: 0; left: 0; }
+.jcl-v { width: 1px; height: 40px; top: 0; left: 0; }
+
+.jcorner-text {
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: rgba(255,110,180,0.5);
+  white-space: nowrap;
+}
+
+/* ══ LEFT PANEL ══ */
+#jhud-left {
+  position: absolute;
+  top: 50%;
+  left: 30px;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 160px;
+  padding: 16px;
+  background: rgba(15,0,30,0.7);
+  border: 1px solid rgba(255,110,180,0.15);
+  border-radius: 6px;
+  backdrop-filter: blur(10px);
+}
+
+.jleft-title {
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: rgba(255,20,147,0.55);
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(255,110,180,0.12);
+  padding-bottom: 8px;
+}
+
+.jleft-coord {
+  font-size: 12px;
+  color: rgba(0,220,255,0.8);
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  font-family: 'Orbitron', monospace;
+}
+
+.jleft-coord span {
+  color: #00EEFF;
+  font-weight: 700;
+}
+
+.jleft-bar-wrap { margin-top: 14px; }
+
+.jleft-bar-label {
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: rgba(255,110,180,0.4);
+  margin-bottom: 6px;
+}
+
+.jleft-bar {
+  height: 3px;
+  background: rgba(255,110,180,0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.jleft-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #FF1493, #FF6EB4);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 8px rgba(255,110,180,0.5);
+}
+
+/* ══ RIGHT PANEL ══ */
+#jhud-right {
+  position: absolute;
+  top: 50%;
+  right: 30px;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 220px;
+  padding: 16px;
+  background: rgba(15,0,30,0.7);
+  border: 1px solid rgba(0,180,255,0.15);
+  border-radius: 6px;
+  backdrop-filter: blur(10px);
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+#jhud-right::-webkit-scrollbar { display: none; }
+
+.jright-title {
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: rgba(0,180,255,0.5);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(0,180,255,0.1);
+  padding-bottom: 8px;
+}
+
+#jresponse-text {
+  font-size: 12px;
+  line-height: 1.7;
+  color: rgba(180,230,255,0.85);
+  letter-spacing: 0.3px;
+  font-family: 'Nunito', sans-serif;
+  animation: textFadeIn 0.4s ease;
+}
+
+@keyframes textFadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ══ BOTTOM HUD ══ */
+#jhud-bottom {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 82px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(0deg, rgba(5,0,15,0.95) 0%, rgba(0,5,15,0.5) 100%);
+  border-top: 1px solid rgba(255,110,180,0.12);
+  z-index: 10;
+  backdrop-filter: blur(10px);
+}
+
+#jvoice-label {
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.jvoice-idle {
+  color: rgba(0,200,255,0.55);
+}
+
+.jvoice-listening {
+  color: rgba(255,80,80,0.9);
+  animation: voicePulse 0.7s ease-in-out infinite;
+}
+
+.jvoice-thinking {
+  color: rgba(255,20,147,0.9);
+  animation: voicePulse 0.5s ease-in-out infinite;
+}
+
+.jvoice-speaking {
+  color: rgba(0,255,160,0.9);
+  animation: voicePulse 1s ease-in-out infinite;
+}
+
+@keyframes voicePulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+#jwave-canvas {
+  display: block;
+}
+
+#jvoice-transcript {
+  font-size: 11px;
+  color: rgba(255,220,100,0.7);
+  letter-spacing: 1px;
+  min-height: 14px;
+  font-family: 'Nunito', sans-serif;
+}
+
+/* ── Sidebar Jarvis button ── */
+.nav-item[data-view="jarvis"] {
+  margin-top: 8px;
+  border: 1px solid rgba(255,110,180,0.3);
+  background: rgba(255,140,0,0.07);
+}
+
