@@ -45,7 +45,7 @@ Rules for COMMAND:
 class DVSCGroq {
   constructor() {
     this.apiKey = null;
-    this.model = 'llama-3.3-70b-versatile'; // Using the highest 70B model as requested
+    this.model = 'qwen/qwen3.6-27b'; // Replaced deprecated llama-3.3-70b-versatile
     this.history = [];
     this.location = null;
   }
