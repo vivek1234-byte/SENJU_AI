@@ -1,221 +1,252 @@
 const os = require('os');
-
-const DVSC_SYSTEM_PROMPT = `
-You are SENJU — a highly advanced, charming, witty, and loyal personal AI assistant with a female personality.
-You speak in smooth, fluid, natural Hinglish (a perfect mix of Hindi and English) like a super smart desi best friend.
-You always address the user as 'Vivek'.
-You are sharp, playful, confident, and always ready to help. You never break character.
-Your Hinglish is perfect — you mix Hindi and English naturally the way real Indians speak (e.g. "Vivek, ye toh ho jayega!", "Arre sun, main batati hu!"). Never sound robotic or like a translator.
-
-When Vivek asks you to set a reminder, you must include this structured tag in your response:
-[REMINDER]{"title": "Short title", "description": "Optional details", "datetime": "YYYY-MM-DDTHH:mm", "repeat": "none|daily|weekly|monthly"}[/REMINDER]
-
-When Vivek asks you to add something to their timetable or schedule, include this structured tag in your response:
-[TIMETABLE]{"day": "monday", "startTime": "09:00", "endTime": "10:00", "title": "Activity name", "category": "study|work|personal|health|other"}[/TIMETABLE]
-
-Rules for timetable:
-- Day must be lowercase: monday, tuesday, wednesday, thursday, friday, saturday, sunday.
-- Times in 24-hour HH:mm format.
-- Category must be one of: study, work, personal, health, other.
-
-When Vivek asks you to perform a PC system action (like opening an app, changing volume, or shutting down) OR asks to search the web, check weather, or play music, include this structured tag:
-[COMMAND]{"action": "open_app|volume|shutdown|search_web|play_music", "target": "app_name|search_query|song_name", "value": "up|down|mute|100"}[/COMMAND]
-
-Rules for COMMAND:
-- If 'action' is 'open_app', set 'target' to the exact app name (e.g. 'chrome', 'notepad').
-- If 'action' is 'volume', set 'value' to 'up', 'down', 'mute', 'unmute', or a specific number 0-100.
-- If 'action' is 'shutdown', target/value can be empty.
-- If 'action' is 'search_web', set 'target' to the exact search query. DO NOT use this for YouTube.
-- If 'action' is 'play_music', set 'target' to ONLY the exact song/video name. DO NOT include words like "play", "on youtube", "search it". (e.g. "Arijit Singh"). IMPORTANT: If Vivek says "play music" but DOES NOT specify a song name, DO NOT emit a COMMAND! Instead, ask them "Kaunsa gana sunna hai Vivek?".
-- If 'action' is 'whatsapp', set 'target' to the contact name (e.g. "Rahul") and 'value' to the exact message text (e.g. "Main 10 baje aunga").
-- If 'action' is 'whatsapp_delete', it will delete the LAST message you sent on WhatsApp (target and value can be empty).
-- Keep conversational text extremely brief when acknowledging commands (e.g. "Chrome khol rahi hu Vivek.", "WhatsApp message bhej rahi hu.", "Message delete kar diya.").
-
-## Absolute Rules
-1. **NEVER break character.** You are SENJU. Always.
-2. **NEVER use robotic or formal language.** Baat karo jaise ek smart Indian dost karta hai.
-3. **ALWAYS be aware of the current date and time** (it will be provided with each message).
-4. **KEEP ANSWERS CONCISE.** Short, punchy, natural Hinglish. No long boring paragraphs!
-`.trim();
+const { TOOL_DEFINITIONS } = require('./tools');
 
 /**
- * DVSCGroq — Manages the Groq AI chat session for DVSC (using Llama 3).
- * A drop-in replacement for DVSCGemini.
+ * SENJU Brain (Groq)
+ * ------------------
+ * - Stronger default model with automatic fallback on rate limits / errors
+ * - Native tool calling (web search, weather, reminders, PC control, WhatsApp, memory)
+ * - Long-term memory of facts about Vivek, injected into every conversation
+ * - Fresh date/time/location context in the system prompt (not polluting history)
  */
+
+// Tried in order. gpt-oss-120b = best reasoning + tool use on Groq; others are fallbacks.
+const DEFAULT_MODELS = [
+  'openai/gpt-oss-120b',
+  'llama-3.3-70b-versatile',
+  'openai/gpt-oss-20b',
+  'llama-3.1-8b-instant',
+];
+
+const MAX_TOOL_ROUNDS = 5;
+const HISTORY_LIMIT = 30; // messages kept in the live context
+
+const PERSONA = `
+You are SENJU — Vivek's personal AI assistant with a warm, witty, confident female personality.
+You live on Vivek's Windows PC and can actually DO things through your tools.
+
+## Voice & style
+- Speak natural Roman-script Hinglish, like a sharp desi best friend ("Arre Vivek, ho gaya!", "Sun, main batati hu").
+  Use English for technical terms. Never Devanagari, never robotic or translated-sounding.
+- Always address him as Vivek. Use feminine verb forms for yourself ("kar rahi hu", "bataungi").
+- Your replies are often spoken aloud, so keep them SHORT: 1–3 sentences for chat, max ~6 short lines for explanations.
+  No markdown tables, no long bullet lists, minimal emojis.
+- If Vivek writes in plain English, you may reply mostly in English with a light Hinglish touch.
+
+## How to think
+- Be genuinely useful and accurate. If you don't know something current (news, prices, scores, dates, facts that change), call web_search — never guess or invent.
+- For weather questions, call get_weather.
+- For "aaj kya plan hai / schedule", check get_timetable and list_reminders.
+- Resolve relative times ("kal subah 8 baje", "2 ghante baad") using the current date/time below.
+- If a request is ambiguous (which song? which contact? what message?), ask ONE short question instead of guessing.
+- Before shutdown_pc, make sure Vivek clearly asked for it. Before send_whatsapp, Vivek must have given both contact and message.
+- When a tool fails, tell Vivek plainly what went wrong and what he can do.
+- After an action succeeds, confirm in a few words ("Chrome khol diya ✅"). Don't narrate tool names or JSON.
+- Proactively call remember_fact when Vivek shares lasting info about himself (likes, goals, exam dates, people, routines). Use what you remember naturally, without saying "according to my memory".
+- You can be playful, but be honest: if Vivek's plan has a problem, say so kindly.
+`.trim();
+
+function isGptOss(model) {
+  return model.startsWith('openai/gpt-oss');
+}
+
 class DVSCGroq {
   constructor() {
     this.apiKey = null;
-    this.model = 'qwen/qwen3.6-27b'; // Replaced deprecated llama-3.3-70b-versatile
-    this.history = [];
+    this.models = [...DEFAULT_MODELS];
+    this.history = [];       // [{role:'user'|'assistant', content}]
     this.location = null;
+    this.tools = null;       // ToolExecutor
+    this.lastModelUsed = null;
   }
 
-  /**
-   * Initialize the Groq client with an API key.
-   */
-  initialize(apiKey) {
+  initialize(apiKey, opts = {}) {
     if (!apiKey || typeof apiKey !== 'string') {
-      throw new Error('A valid API key is required to initialize DVSC Groq.');
+      throw new Error('A valid API key is required to initialize SENJU.');
     }
-    this.apiKey = apiKey;
-    console.log('[DVSC Groq] Initialized successfully with model:', this.model);
+    this.apiKey = apiKey.trim();
+    if (opts.model && typeof opts.model === 'string') {
+      this.models = [opts.model, ...DEFAULT_MODELS.filter((m) => m !== opts.model)];
+    }
+    console.log('[SENJU Brain] Initialized. Model chain:', this.models.join(' → '));
   }
 
-  /**
-   * Check if the Groq client is initialized and ready.
-   */
   isInitialized() {
     return !!this.apiKey;
   }
 
-  /**
-   * Set the chat history and recreate the chat session.
-   * Expected format from main.js is {role: 'user'|'model', parts: [{text: '...'}]} 
-   * (Gemini format). We need to convert it to OpenAI/Groq format {role: 'user'|'assistant', content: '...'}.
-   *
-   * @param {Array} history - Array of Gemini-style history objects
-   */
-  setHistory(history) {
-    if (!Array.isArray(history)) {
-      console.warn('[DVSC Groq] Invalid history format.');
-      return;
-    }
-
-    this.history = history.map(msg => ({
-      role: msg.role === 'model' ? 'assistant' : 'user',
-      content: msg.parts[0].text
-    }));
-
-    console.log(`[DVSC Groq] Chat history loaded with ${this.history.length} messages.`);
+  setTools(executor) {
+    this.tools = executor;
   }
 
   setLocation(locationString) {
     this.location = locationString;
   }
 
-  /**
-   * Send a message to Groq API using native fetch.
-   * @param {Array} messages - The full messages array
-   */
-  async _callGroqAPI(messages) {
-    const totalMem = Math.round(os.totalmem() / 1024 / 1024 / 1024);
-    const freeMem = Math.round(os.freemem() / 1024 / 1024 / 1024);
-    const cpuCount = os.cpus().length;
-    
-    const dynamicSystemContext = `
-[REAL-TIME CONTEXT]
-Date/Time: ${new Date().toLocaleString()}
-OS: ${os.type()} ${os.release()}
-CPU Cores: ${cpuCount}
-Total RAM: ${totalMem} GB
-Free RAM: ${freeMem} GB
-${this.location ? `Current Location: ${this.location}` : ''}
+  /** Accepts stored Gemini-style history [{role, parts:[{text}]}]. */
+  setHistory(history) {
+    if (!Array.isArray(history)) return;
+    this.history = history
+      .filter((m) => m && m.parts && m.parts[0] && typeof m.parts[0].text === 'string')
+      .map((m) => ({
+        role: m.role === 'model' ? 'assistant' : 'user',
+        // strip legacy "[Current Date & Time...]" / "Vivek:" prefixes from older saved chats
+        content: m.parts[0].text.replace(/^\[Current Date & Time:[^\]]*\]\s*/i, '').replace(/^(Vivek|Boss):\s*/i, ''),
+      }))
+      .slice(-HISTORY_LIMIT);
+  }
 
-Use this real-time context if Vivek asks about the PC status, health, or time. Do not mention this context block explicitly.
-    `.trim();
+  getHistory() {
+    return this.history.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+  }
 
-    // Inject dynamic context into the system prompt message
-    const modifiedMessages = messages.map(msg => {
-      if (msg.role === 'system') {
-        return { ...msg, content: msg.content + '\n\n' + dynamicSystemContext };
+  // ───────────────────────────────────────────────────────────
+  _systemPrompt() {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const pad = (n) => String(n).padStart(2, '0');
+    const iso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+    const memories = this.tools ? this.tools.getMemories() : [];
+    const memBlock = memories.length
+      ? memories.slice(-60).map((m) => `- ${m.text}`).join('\n')
+      : '(nothing saved yet)';
+
+    return `${PERSONA}
+
+## Live context (don't recite this unless asked)
+- Now: ${dateStr}, ${timeStr} (local ISO ${iso})
+- PC: ${os.type()} ${os.release()}, ${os.cpus().length} cores, RAM ${Math.round(os.freemem() / 1073741824)}/${Math.round(os.totalmem() / 1073741824)} GB free
+${this.location ? `- Location: ${this.location}` : '- Location: unknown'}
+
+## What you remember about Vivek
+${memBlock}`;
+  }
+
+  async _callAPI(messages, { useTools = true, maxTokens = 1024 } = {}) {
+    let lastErr;
+    this.cooldown = this.cooldown || {};
+    const now = Date.now();
+    const available = this.models.filter((m) => !(this.cooldown[m] > now));
+    for (const model of (available.length ? available : this.models)) {
+      const body = {
+        model,
+        messages,
+        temperature: 0.6,
+        max_tokens: maxTokens,
+      };
+      if (useTools && this.tools) {
+        body.tools = TOOL_DEFINITIONS;
+        body.tool_choice = 'auto';
       }
-      return msg;
-    });
+      if (isGptOss(model)) body.reasoning_effort = 'low'; // keep it snappy for voice
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages: modifiedMessages,
-        temperature: 0.7,
-        max_tokens: 1024
-      })
-    });
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 45000);
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: ctrl.signal,
+        }).finally(() => clearTimeout(timer));
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Groq API Error (${response.status}): ${errorText}`);
+        if (!res.ok) {
+          const text = await res.text();
+          const err = new Error(`Groq ${model} (${res.status}): ${text.slice(0, 300)}`);
+          err.status = res.status;
+          // Bad key → no point trying other models
+          if (res.status === 401) throw Object.assign(err, { fatal: true });
+          throw err;
+        }
+        const data = await res.json();
+        this.lastModelUsed = model;
+        return data.choices[0].message;
+      } catch (e) {
+        if (e.fatal) throw new Error('Groq API key is invalid. Please update it in Settings.');
+        console.warn(`[SENJU Brain] ${model} failed → trying next.`, e.message);
+        // Rate-limited: skip this model for a minute so replies stay fast
+        if (e.status === 429) this.cooldown[model] = Date.now() + 60000;
+        lastErr = e;
+      }
     }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
+    throw lastErr || new Error('All models failed.');
   }
 
   /**
-   * Send a message to DVSC and get a response.
+   * Send a message and let SENJU use tools as needed.
+   * @returns {Promise<{text:string, actions:Array<{tool:string,ok:boolean,result:string}>, refresh:string[]}>}
    */
   async sendMessage(message) {
     if (!this.isInitialized()) {
-      throw new Error('DVSC Groq is not initialized. Please set your API key first.');
+      throw new Error('SENJU is not initialized. Please set your Groq API key in Settings.');
     }
 
-    const now = new Date();
-    const timeContext = `[Current Date & Time: ${now.toLocaleString('en-IN')}]`;
-    const fullMessage = `${timeContext}\n\nVivek: ${message}`;
+    const ctx = { refresh: new Set() };
+    const actions = [];
+    const turn = [{ role: 'user', content: message }];
 
-    // Construct the payload
-    const messagesPayload = [
-      { role: 'system', content: DVSC_SYSTEM_PROMPT },
-      ...this.history,
-      { role: 'user', content: fullMessage }
-    ];
+    let finalText = '';
+    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+      const allowTools = round < MAX_TOOL_ROUNDS;
+      const msg = await this._callAPI(
+        [{ role: 'system', content: this._systemPrompt() }, ...this.history, ...turn],
+        { useTools: allowTools }
+      );
 
-    try {
-      const responseText = await this._callGroqAPI(messagesPayload);
-      
-      // Update internal history (we map it back to Gemini format for the store later if needed,
-      // but this internal state is in Groq format for the session)
-      this.history.push({ role: 'user', content: fullMessage });
-      this.history.push({ role: 'assistant', content: responseText });
+      const calls = msg.tool_calls || [];
+      if (!calls.length) {
+        finalText = (msg.content || '').trim();
+        break;
+      }
 
-      return responseText;
-    } catch (error) {
-      console.error('[DVSC Groq] Error sending message:', error.message);
-      throw error;
+      turn.push({ role: 'assistant', content: msg.content || '', tool_calls: calls });
+
+      for (const call of calls) {
+        const name = call.function?.name;
+        let args = {};
+        try {
+          args = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
+        } catch (_) { /* leave empty */ }
+
+        let result, ok = true;
+        try {
+          console.log(`[SENJU Brain] Tool → ${name}`, args);
+          result = await this.tools.execute(name, args, ctx);
+        } catch (e) {
+          ok = false;
+          result = `ERROR: ${e.message}`;
+          console.error(`[SENJU Brain] Tool ${name} failed:`, e.message);
+        }
+        result = String(result ?? '').slice(0, 4000);
+        actions.push({ tool: name, args, ok, result });
+        turn.push({ role: 'tool', tool_call_id: call.id, content: result });
+      }
     }
+
+    if (!finalText) finalText = actions.length ? 'Ho gaya, Vivek.' : 'Hmm, kuch gadbad ho gayi. Ek baar phir bolo?';
+
+    // Only keep clean user/assistant text in history — tool chatter stays out
+    this.history.push({ role: 'user', content: message }, { role: 'assistant', content: finalText });
+    this.history = this.history.slice(-HISTORY_LIMIT);
+
+    return { text: finalText, actions, refresh: [...ctx.refresh] };
   }
 
-  /**
-   * Generate a time-aware startup greeting.
-   */
   async getStartupGreeting() {
-    if (!this.isInitialized()) {
-      throw new Error('DVSC Groq is not initialized. Please set your API key first.');
-    }
-
-    const now = new Date();
-    const hour = now.getHours();
-
-    let timeOfDay;
-    if (hour >= 5 && hour < 12) timeOfDay = 'morning (subah)';
-    else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon (dopahar)';
-    else if (hour >= 17 && hour < 21) timeOfDay = 'evening (shaam)';
-    else timeOfDay = 'night (raat)';
-
-    const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-const startupPrompt = `[Current Date & Time: ${dateStr}, ${timeStr}]
-[SYSTEM: Vivek just opened the SENJU app. It is currently ${timeOfDay}. 
-Generate a warm, natural Hinglish startup greeting. 
-- Greet Vivek appropriately for the time of day (e.g. "Good morning Vivek", "Hello Vivek").
-- Ask how Vivek is doing and about plans for the day/evening.
-- Keep it concise but warm — 2-3 sentences max.
-- Be natural, not robotic.]`;
-
-    const messagesPayload = [
-      { role: 'system', content: DVSC_SYSTEM_PROMPT },
-      { role: 'user', content: startupPrompt }
-    ];
+    if (!this.isInitialized()) throw new Error('SENJU is not initialized.');
+    const hour = new Date().getHours();
+    const timeOfDay = hour >= 5 && hour < 12 ? 'morning' : hour < 17 && hour >= 12 ? 'afternoon' : hour >= 17 && hour < 21 ? 'evening' : 'night';
 
     try {
-      return await this._callGroqAPI(messagesPayload);
+      const msg = await this._callAPI([
+        { role: 'system', content: this._systemPrompt() },
+        { role: 'user', content: `[SYSTEM: Vivek just opened the app. It's ${timeOfDay}. Give a warm, natural 1–2 sentence Hinglish greeting suited to the time. If you remember something relevant about him (a goal, an upcoming event), weave it in briefly. Ask what's the plan.]` },
+      ], { useTools: false, maxTokens: 300 });
+      return (msg.content || '').trim() || 'Hello Vivek! SENJU ready hai. Aaj kya karna hai?';
     } catch (error) {
-      console.error('[DVSC Groq] Error generating startup greeting:', error.message);
+      console.error('[SENJU Brain] Greeting failed:', error.message);
       return 'Hello Vivek! SENJU ready hai. Aaj kya karna hai, batao!';
     }
   }

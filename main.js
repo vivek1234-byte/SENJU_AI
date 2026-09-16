@@ -12,8 +12,26 @@
 const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { exec } = require('child_process');
-const loudness = require('loudness');
-const YouTube = require('youtube-sr').default;
+// Lazy-loaded (only needed when a command runs) to keep startup fast
+const lazy = {
+  get loudness() { return require('loudness'); },
+  get YouTube() { return require('youtube-sr').default; },
+};
+
+// Only one SENJU at a time: double-clicking again just brings the running window back
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+  process.exit(0);
+}
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('window-shown');
+  }
+});
 // Disable autoplay policy to allow background audio context without user gestures
 
 // Disable autoplay policy to allow background audio context without user gestures
@@ -59,7 +77,7 @@ const store = new Store({
   name: 'dvsc-data',
   defaults: {
     settings: {
-      apiKey: 'YOUR_API_KEY_HERE',
+      apiKey: '',
       userName: 'Vivek',
       voiceEnabled: true,
       language: 'hi-en',
@@ -77,8 +95,11 @@ const store = new Store({
 const DVSCGroq = require('./modules/groq');
 const ReminderManager = require('./modules/reminders');
 const TimetableManager = require('./modules/timetable');
+const ClassAlertScheduler = require('./modules/classAlerts');
+const { buildICS } = require('./modules/icsExport');
 const DVSCTts = require('./modules/tts');
 const whatsapp = require('./modules/whatsapp');
+const { ToolExecutor, runSystemCommand } = require('./modules/tools');
 
 // ─────────────────────────────────────────────────────────────
 // Module Instances
@@ -88,6 +109,8 @@ let dvsc = null;
 const tts = new DVSCTts();
 let reminderManager;
 let timetableManager;
+let toolExecutor = null;
+let classAlerts = null;
 
 /** @type {BrowserWindow|null} */
 let mainWindow = null;
@@ -160,9 +183,12 @@ function initializeAI() {
   const settings = store.get('settings');
 
   try {
+    const previousLocation = dvsc ? dvsc.location : null;
     dvsc = new DVSCGroq();
+    if (previousLocation) dvsc.setLocation(previousLocation);
+    if (toolExecutor) dvsc.setTools(toolExecutor);
     if (settings.apiKey) {
-      dvsc.initialize(settings.apiKey);
+      dvsc.initialize(settings.apiKey, { model: settings.aiModel });
       console.log('[DVSC] Groq initialized.');
     } else {
       console.log('[DVSC] No API key found. Groq not initialized.');
@@ -267,7 +293,7 @@ ipcMain.handle('chat-message', async (_event, message) => {
       };
     }
 
-    const response = await dvsc.sendMessage(message);
+    const { text: response, actions, refresh } = await dvsc.sendMessage(message);
 
     const chats = store.get('chats', []);
     const currentChatId = store.get('currentChatId');
@@ -294,7 +320,7 @@ ipcMain.handle('chat-message', async (_event, message) => {
       store.set('chats', chats);
     }
 
-    return { success: true, response };
+    return { success: true, response, actions, refresh, model: dvsc.lastModelUsed };
   } catch (error) {
     console.error('[DVSC] Chat error:', error.message);
     return { success: false, error: error.message };
@@ -325,6 +351,10 @@ ipcMain.handle('chat-startup', async () => {
 ipcMain.handle('get-chat-history', () => {
   return dvsc.getHistory();
 });
+
+// Long-term memory (facts SENJU remembers about Vivek)
+ipcMain.handle('get-memories', () => store.get('memories', []));
+ipcMain.handle('clear-memories', () => { store.set('memories', []); return { success: true }; });
 
 // Multi-chat handlers
 ipcMain.handle('get-all-chats', () => {
@@ -468,6 +498,48 @@ ipcMain.handle('add-timetable-entry', (_event, entry) => {
   return timetableManager.add(entry);
 });
 
+ipcMain.handle('update-timetable-entry', (_event, id, updates) => {
+  const updated = timetableManager.update(id, updates);
+  if (!updated) throw new Error('Entry not found: ' + id);
+  return updated;
+});
+
+// Export timetable as a phone-calendar file (.ics) with alerts before each class
+ipcMain.handle('export-timetable-ics', async (_event, opts = {}) => {
+  try {
+    const { dialog } = require('electron');
+    const fs = require('fs');
+    const { ics, count } = buildICS(timetableManager.getAll(), opts);
+    if (!count) return { success: false, error: 'Timetable is empty.' };
+
+    let filePath;
+    if (opts.sendToWhatsApp) {
+      filePath = path.join(app.getPath('temp'), 'College-Timetable-SENJU.ics');
+    } else {
+      const res = await dialog.showSaveDialog(mainWindow, {
+        title: 'Save timetable for your phone',
+        defaultPath: path.join(app.getPath('downloads'), 'College-Timetable-SENJU.ics'),
+        filters: [{ name: 'Calendar file', extensions: ['ics'] }],
+      });
+      if (res.canceled || !res.filePath) return { success: false, canceled: true };
+      filePath = res.filePath;
+    }
+
+    fs.writeFileSync(filePath, ics, 'utf8');
+
+    if (opts.sendToWhatsApp) {
+      await whatsapp.sendFileToSelf(filePath, `📚 College timetable (${count} classes) — open this file on your phone to add it to your calendar.`);
+      return { success: true, count, sentToWhatsApp: true };
+    }
+
+    require('electron').shell.showItemInFolder(filePath);
+    return { success: true, count, filePath };
+  } catch (error) {
+    console.error('[SENJU] ICS export failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('delete-timetable-entry', (_event, id) => {
   return timetableManager.delete(id);
 });
@@ -485,7 +557,8 @@ ipcMain.handle('save-settings', (_event, newSettings) => {
   const providerChanged = newSettings.aiProvider !== currentSettings.aiProvider;
   const pathChanged = newSettings.localModelPath !== currentSettings.localModelPath;
   const apiKeyChanged = newSettings.apiKey !== undefined && newSettings.apiKey !== currentSettings.apiKey;
-  const configChanged = providerChanged || pathChanged || apiKeyChanged;
+  const modelChanged = newSettings.aiModel !== undefined && newSettings.aiModel !== currentSettings.aiModel;
+  const configChanged = providerChanged || pathChanged || apiKeyChanged || modelChanged;
 
   // Merge new settings with existing ones
   const mergedSettings = { ...currentSettings, ...newSettings };
@@ -544,139 +617,13 @@ ipcMain.handle('tts-speak', async (_event, text) => {
 // ─────────────────────────────────────────────────────────────
 
 ipcMain.handle('execute-command', async (_event, cmd) => {
-  console.log(`[DVSC] Executing System Command:`, cmd);
+  // Legacy path (old [COMMAND] tags). New replies use tool calling inside the brain.
+  console.log('[SENJU] Executing legacy system command:', cmd);
   try {
-    if (cmd.action === 'open_app') {
-      if (!cmd.target) throw new Error("No target specified for open_app");
-      
-      let targetApp = cmd.target.toLowerCase().replace(/_/g, ' ');
-      
-      // Map common AI outputs to actual Windows executable names
-      const appMap = {
-        'google chrome': 'chrome',
-        'chrome': 'chrome',
-        'microsoft edge': 'msedge',
-        'edge': 'msedge',
-        'word': 'winword',
-        'microsoft word': 'winword',
-        'excel': 'excel',
-        'microsoft excel': 'excel',
-        'powerpoint': 'powerpnt',
-        'microsoft powerpoint': 'powerpnt',
-        'vscode': 'code',
-        'visual studio code': 'code',
-        'calculator': 'calc'
-      };
-
-      const finalApp = appMap[targetApp] || targetApp.replace(/\s+/g, '');
-
-      // Use 'start <app>' on Windows to safely open registered apps
-      exec(`start ${finalApp}`, (error) => {
-        if (error) console.error(`[DVSC] Failed to open app ${finalApp}:`, error.message);
-      });
-      return { success: true };
-    } 
-    
-    else if (cmd.action === 'volume') {
-      if (cmd.value === 'up') {
-        const vol = await loudness.getVolume();
-        await loudness.setVolume(Math.min(100, vol + 20));
-      } else if (cmd.value === 'down') {
-        const vol = await loudness.getVolume();
-        await loudness.setVolume(Math.max(0, vol - 20));
-      } else if (cmd.value === 'mute') {
-        await loudness.setMuted(true);
-      } else if (cmd.value === 'unmute') {
-        await loudness.setMuted(false);
-      } else {
-        // Direct value like "50"
-        const num = parseInt(cmd.value);
-        if (!isNaN(num)) {
-          await loudness.setVolume(Math.max(0, Math.min(100, num)));
-        }
-      }
-      return { success: true };
-    } 
-    
-    else if (cmd.action === 'shutdown') {
-      // Shutdown Windows PC immediately
-      exec('shutdown /s /t 0', (error) => {
-        if (error) console.error(`[DVSC] Failed to shutdown:`, error.message);
-      });
-      return { success: true };
-    }
-    
-    else if (cmd.action === 'search_web') {
-      if (!cmd.target) throw new Error("No target specified for search_web");
-      
-      // Auto-intercept: if the AI accidentally sent a song search to search_web, convert it!
-      const tLower = cmd.target.toLowerCase();
-      if (tLower.includes('song') || tLower.includes('music') || tLower.includes('gana') || tLower.includes('play')) {
-         cmd.action = 'play_music';
-      } else {
-         const url = `https://www.google.com/search?q=${encodeURIComponent(cmd.target)}`;
-         exec(`start "" "${url}"`);
-         return { success: true };
-      }
-    }
-    
-    if (cmd.action === 'play_music') {
-      if (!cmd.target) throw new Error("No target specified for play_music");
-      
-      try {
-        // The smaller 8B model sometimes includes conversational filler. 
-        // We filter out stop words to get the true song name.
-        const stopWords = ['play', 'search', 'youtube', 'on', 'for', 'me', 'the', 'a', 'an', 'some', 'music', 'video', 'chalao', 'baja', 'do', 'gana', 'karo', 'song', 'songs', 'aur', 'mera', 'apna'];
-        const keywords = cmd.target.toLowerCase()
-            .split(' ')
-            .map(w => w.replace(/[^a-z0-9]/g, ''))
-            .filter(w => w.length > 1 && !stopWords.includes(w));
-        
-        let cleanQuery = keywords.length > 0 ? keywords.join(' ') : cmd.target.trim();
-        
-        // Prevent empty strings or just 'youtube' from searching and returning ABC News
-        if (!cleanQuery || cleanQuery.toLowerCase() === 'youtube') {
-            cleanQuery = 'latest hit songs hindi';
-        }
-
-        // Fetch accurate youtube results using youtube-sr
-        const videos = await YouTube.search(cleanQuery, { limit: 5, type: "video" });
-        
-        if (videos && videos.length > 0) {
-          let bestVideo = videos[0];
-          
-          // Exact word matching: ensure all keywords exist in the title
-          if (keywords.length > 0) {
-            for (const v of videos) {
-              const title = v.title.toLowerCase();
-              if (keywords.every(k => title.includes(k))) {
-                bestVideo = v;
-                break;
-              }
-            }
-          }
-
-          const url = bestVideo.url;
-          exec(`start "" "${url}"`, (error) => {
-            if (error) console.error(`[DVSC] Failed to play music:`, error.message);
-          });
-        } else {
-          // fallback
-          const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleanQuery)}`;
-          exec(`start "" "${url}"`);
-        }
-      } catch (err) {
-        console.error(`[DVSC] Music command failed:`, err);
-        // fallback
-        const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(cmd.target)}`;
-        exec(`start "" "${url}"`);
-      }
-      return { success: true };
-    }
-
-    return { success: false, error: 'Unknown action' };
+    const message = await runSystemCommand(cmd, lazy);
+    return { success: true, message };
   } catch (err) {
-    console.error(`[DVSC] Command execution failed:`, err);
+    console.error('[SENJU] Command execution failed:', err.message);
     return { success: false, error: err.message };
   }
 });
@@ -718,11 +665,25 @@ app.whenReady().then(() => {
   reminderManager = reminderMgr;
   timetableManager = timetableMgr;
 
+  // Tools the AI can call (web search, weather, reminders, PC control, WhatsApp, memory)
+  toolExecutor = new ToolExecutor({
+    store,
+    reminderManager,
+    timetableManager,
+    whatsapp,
+    get loudness() { return lazy.loudness; },
+    get YouTube() { return lazy.YouTube; },
+    getApiKey: () => store.get('settings').apiKey,
+    getLocation: () => (dvsc ? dvsc.location : null),
+  });
+
   // Create the main window
   createWindow();
 
-  // Initialize WhatsApp Web Client
-  whatsapp.initWhatsApp(mainWindow);
+  // Start WhatsApp (headless Chromium) only after the UI has loaded, so it doesn't slow the window
+  mainWindow.webContents.once('did-finish-load', () => {
+    setTimeout(() => whatsapp.initWhatsApp(mainWindow), 4000);
+  });
 
   // Initialize Gemini AI if API key exists
   initializeAI();
@@ -738,6 +699,10 @@ app.whenReady().then(() => {
 
   // Start the reminder scheduler
   reminderManager.startScheduler(mainWindow);
+
+  // Offline class alerts (default: 15 minutes before each class in the timetable)
+  classAlerts = new ClassAlertScheduler(store, timetableManager);
+  classAlerts.start(mainWindow);
 
   // Setup System Tray
   // Removed setupSystemTray() to prevent background execution
@@ -787,5 +752,6 @@ app.on('before-quit', () => {
 
 app.on('window-all-closed', () => {
   if (reminderManager) reminderManager.stopScheduler();
+  if (classAlerts) classAlerts.stop();
   if (process.platform !== 'darwin') app.quit();
 });

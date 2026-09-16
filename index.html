@@ -5,8 +5,9 @@
   <title>SENJU — Your Smart AI Companion</title>
   <link rel="stylesheet" href="styles/main.css">
   <link rel="stylesheet" href="styles/jarvis.css">
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <!-- Fonts load in the background so they never block the window from painting -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Orbitron:wght@400;600;700;900&family=Noto+Sans+JP:wght@300;400;500&display=swap">
 </head>
 <body>
 
@@ -16,11 +17,11 @@
       <div class="boot-logo">SENJU</div>
       <div class="boot-subtitle">スマート・エキスパート・あなたの相棒</div>
       <div class="boot-lines">
-        <div class="boot-line" data-delay="400">🌸 Initializing Neural Core...</div>
-        <div class="boot-line" data-delay="900">✨ Loading AI Engine... <span class="boot-status">ONLINE</span></div>
-        <div class="boot-line" data-delay="1400">🎙️ Voice Module... <span class="boot-status">ACTIVE</span></div>
-        <div class="boot-line" data-delay="1900">⏰ Reminder System... <span class="boot-status">READY</span></div>
-        <div class="boot-line" data-delay="2400">💕 Welcome back, Vivek~ 🌸</div>
+        <div class="boot-line" data-delay="80">🌸 Initializing Neural Core...</div>
+        <div class="boot-line" data-delay="200">✨ Loading AI Engine... <span class="boot-status">ONLINE</span></div>
+        <div class="boot-line" data-delay="320">🎙️ Voice Module... <span class="boot-status">ACTIVE</span></div>
+        <div class="boot-line" data-delay="440">⏰ Reminder System... <span class="boot-status">READY</span></div>
+        <div class="boot-line" data-delay="560">💕 Welcome back, Vivek~ 🌸</div>
       </div>
     </div>
   </div>
@@ -160,10 +161,42 @@
         <div id="view-timetable" class="view">
           <div class="view-header">
             <h2>📅 Timetable</h2>
-            <button id="add-timetable-btn" class="btn-primary">+ Add Entry</button>
+            <div style="display:flex; gap:8px;">
+              <button id="phone-cal-btn" class="btn-ghost">📱 Put on Phone</button>
+              <button id="add-timetable-btn" class="btn-primary">+ Add Entry</button>
+            </div>
+          </div>
+          <div id="phone-cal-panel" class="glass-card" style="display:none;">
+            <h3>📱 Class alerts on your phone (works even when PC is off)</h3>
+            <p class="phone-cal-help">SENJU creates a calendar file of your whole timetable. Add it to your phone's calendar once — it will alert you before every class, every week, even with no internet.</p>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Alert before class (minutes)</label>
+                <input type="number" id="phone-cal-minutes" min="1" max="120" value="15">
+              </div>
+              <div class="form-group">
+                <label>Repeat until (semester end, optional)</label>
+                <input type="date" id="phone-cal-until">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button id="phone-cal-save" class="btn-primary">💾 Save calendar file</button>
+              <button id="phone-cal-wa" class="btn-ghost">💬 Send file to my WhatsApp</button>
+              <button id="phone-cal-close" class="btn-ghost">Close</button>
+            </div>
+            <div id="phone-cal-status" class="phone-cal-help"></div>
+            <details class="phone-cal-help">
+              <summary><b>How to add it on your phone</b></summary>
+              <ol>
+                <li><b>Android (Google Calendar):</b> on a computer open calendar.google.com → ⚙️ Settings → <i>Add calendar → Create new calendar</i> named "College". In that calendar's settings set <i>Event notifications</i> to <b>15 minutes</b>. Then <i>Import & export → Import</i> the file into "College". Your phone gets it automatically. (Google ignores alerts inside imported files, so the calendar's own notification setting is what makes it ring.)</li>
+                <li><b>Samsung / other Android calendar:</b> send the file to your phone (WhatsApp button above) and tap it → open with Calendar → Save.</li>
+                <li><b>iPhone:</b> send the file to your phone, tap it → <i>Add All</i>. Alerts are included.</li>
+                <li>Changed your timetable? Delete the old "College" calendar events and import the new file.</li>
+              </ol>
+            </details>
           </div>
           <div id="timetable-form" class="glass-card" style="display:none;">
-            <h3>🌸 New Timetable Entry</h3>
+            <h3 id="tt-form-title">🌸 New Timetable Entry</h3>
             <div class="form-row">
               <div class="form-group">
                 <label>Day</label>
@@ -201,6 +234,19 @@
             <div class="form-group">
               <label>Title</label>
               <input type="text" id="tt-title" placeholder="What's this block for?">
+            </div>
+            <div class="tt-venue-section">
+              <label class="tt-venue-label">📍 Venue</label>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Study Block</label>
+                  <input type="text" id="tt-block" placeholder="e.g. A Block / Main Building">
+                </div>
+                <div class="form-group">
+                  <label>Room No.</label>
+                  <input type="text" id="tt-room" placeholder="e.g. 204 / Lab 3">
+                </div>
+              </div>
             </div>
             <div class="form-actions">
               <button id="save-tt-btn" class="btn-primary">Save Entry</button>
@@ -256,6 +302,23 @@
                   </label>
                   <span>Allow SENJU to know your current location</span>
                 </div>
+              </div>
+            </div>
+            <div class="glass-card">
+              <h3>📚 Class Alerts (works offline)</h3>
+              <div class="form-group">
+                <label>Before-class alert</label>
+                <div class="toggle-group">
+                  <label class="toggle">
+                    <input type="checkbox" id="settings-class-alerts" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span>Notify me before each class in my timetable</span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Minutes before class</label>
+                <input type="number" id="settings-class-alert-minutes" min="1" max="120" value="15" style="max-width:120px;">
               </div>
             </div>
             <div class="glass-card">

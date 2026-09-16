@@ -1,5 +1,4 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode');
+// whatsapp-web.js / puppeteer are heavy — required lazily in initWhatsApp() so app start stays fast
 const path = require('path');
 
 let client;
@@ -9,6 +8,7 @@ let lastSentMessage = null;
 let currentQR = null;
 
 function initWhatsApp(mainWindow) {
+    const { Client, LocalAuth } = require('whatsapp-web.js');
     browserWindow = mainWindow;
 
     console.log('[WhatsApp] Initializing client...');
@@ -27,7 +27,7 @@ function initWhatsApp(mainWindow) {
     client.on('qr', async (qr) => {
         console.log('[WhatsApp] QR code generated. Waiting for scan...');
         try {
-            const qrDataUrl = await qrcode.toDataURL(qr);
+            const qrDataUrl = await require('qrcode').toDataURL(qr);
             currentQR = qrDataUrl;
             if (browserWindow) {
                 browserWindow.webContents.send('whatsapp-qr', qrDataUrl);
@@ -82,24 +82,30 @@ async function sendMessage(contactName, messageText) {
     // Simple search (case-insensitive)
     const nameLower = contactName.toLowerCase();
     
-    // Try to find exact or partial match in my contacts
-    const match = contacts.find(c => 
-        c.isMyContact && 
-        c.name && 
-        c.name.toLowerCase().includes(nameLower)
-    );
+    // Prefer an exact name match, then a single partial match. Refuse to guess between several.
+    const mine = contacts.filter(c => c.isMyContact && (c.name || c.pushname));
+    const nameOf = c => (c.name || c.pushname || '').toLowerCase();
+    let match = mine.find(c => nameOf(c) === nameLower);
+    if (!match) {
+        const partial = mine.filter(c => nameOf(c).includes(nameLower));
+        if (partial.length > 1) {
+            const names = partial.slice(0, 5).map(c => c.name || c.pushname).join(', ');
+            throw new Error(`Multiple contacts match '${contactName}': ${names}. Ask Vivek which one.`);
+        }
+        match = partial[0];
+    }
 
     if (!match) {
         throw new Error(`Contact '${contactName}' not found in your WhatsApp contacts.`);
     }
 
-    console.log(`[WhatsApp] Found contact: ${match.name} (${match.id._serialized})`);
+    console.log(`[WhatsApp] Found contact: ${match.name || match.pushname} (${match.id._serialized})`);
     
     const chatId = match.id._serialized;
     lastSentMessage = await client.sendMessage(chatId, messageText);
     
-    console.log(`[WhatsApp] Message sent to ${match.name}`);
-    return `Message successfully sent to ${match.name} via WhatsApp.`;
+    console.log(`[WhatsApp] Message sent to ${match.name || match.pushname}`);
+    return `Message successfully sent to ${match.name || match.pushname} via WhatsApp.`;
 }
 
 async function deleteLastWhatsAppMessage() {
@@ -111,6 +117,20 @@ async function deleteLastWhatsAppMessage() {
     await lastSentMessage.delete(true); // true = delete for everyone
     lastSentMessage = null;
     return 'Message deleted successfully.';
+}
+
+/**
+ * Send a file (e.g. the timetable .ics) to your own "Message yourself" chat.
+ */
+async function sendFileToSelf(filePath, caption) {
+    if (!isReady || !client) {
+        throw new Error('WhatsApp is not connected. Link it in the WhatsApp tab first, or use "Save file" instead.');
+    }
+    const { MessageMedia } = require('whatsapp-web.js');
+    const media = MessageMedia.fromFilePath(filePath);
+    const selfId = client.info.wid._serialized;
+    await client.sendMessage(selfId, media, { sendMediaAsDocument: true, caption });
+    return 'File sent to your own WhatsApp chat.';
 }
 
 function getWhatsAppState() {
@@ -152,5 +172,6 @@ module.exports = {
     sendMessage,
     getWhatsAppState,
     logoutWhatsApp,
-    deleteLastWhatsAppMessage
+    deleteLastWhatsAppMessage,
+    sendFileToSelf
 };

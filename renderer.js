@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Cache for preloaded greeting
   let preloadedGreeting = null;
   let preloadedAudioData = null;
+  let greetingPromise = null;
 
   function startBootSequence() {
     const lines = document.querySelectorAll('.boot-line');
@@ -41,15 +42,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Start prefetching greeting + audio in parallel with animation
-    prefetchGreeting();
+    greetingPromise = prefetchGreeting();
 
     setTimeout(() => {
       bootOverlay.style.opacity = '0';
       setTimeout(() => {
         bootOverlay.style.display = 'none';
         initializeApp();
-      }, 500);
-    }, maxDelay + 1000);
+      }, 250);
+    }, maxDelay + 350);
   }
 
   /**
@@ -89,6 +90,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     populateSettingsForm();
 
+    // UI is usable right away; lists load in parallel with the greeting
+    loadChatsList();
+    loadReminders();
+    loadTimetable();
+    if (settings.locationEnabled) {
+      requestPreciseLocation();
+    }
+
+    // Wait for the greeting that started during boot (no second API call)
+    if (settings.apiKey && !preloadedGreeting && greetingPromise) {
+      await greetingPromise;
+    }
+
     // Check API Key
     if (!settings.apiKey) {
       const noKeyMsg = "Vivek, I'm online, but I need an API key to function properly. Please add your Groq API key in Settings.";
@@ -111,14 +125,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Load Data
-    loadChatsList();
-    loadReminders();
-    loadTimetable();
-    
-    if (settings.locationEnabled) {
-      requestPreciseLocation();
-    }
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -332,7 +338,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (result.success) {
       let responseText = result.response;
       
-      // Parse structured tags
+      // Tool calls already ran in the main process; refresh any panels they touched
+      refreshPanels(result.refresh);
+
+      // Legacy tag support (older models / saved prompts)
       responseText = await parseStructuredTags(responseText);
 
       addMessage(responseText, 'assistant');
@@ -341,6 +350,13 @@ document.addEventListener('DOMContentLoaded', () => {
       addMessage(`Error: ${result.error}`, 'assistant');
     }
   }
+
+  function refreshPanels(list) {
+    if (!Array.isArray(list)) return;
+    if (list.includes('reminders')) loadReminders();
+    if (list.includes('timetable')) loadTimetable();
+  }
+  window.senjuRefresh = refreshPanels;
 
   sendBtn.addEventListener('click', handleSend);
   chatInput.addEventListener('keypress', (e) => {
@@ -750,12 +766,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
+      if (!navigator.onLine) throw new Error('offline');
       const result = await window.dvsc.speak(text);
       if (result.success && result.audioData) {
         playAudioBase64(result.audioData);
+        return;
       }
+      throw new Error('no audio');
     } catch (err) {
-      console.error('TTS failed:', err);
+      speakOffline(text);
+    }
+  }
+
+  // Offline fallback: Windows' built-in voices (no internet needed)
+  function speakOffline(text) {
+    try {
+      if (!('speechSynthesis' in window)) return;
+      const clean = String(text).replace(/[*_`#]/g, '').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '');
+      const u = new SpeechSynthesisUtterance(clean);
+      const voices = window.speechSynthesis.getVoices();
+      u.voice = voices.find(v => /hi-IN|en-IN/i.test(v.lang)) || voices.find(v => /female|zira|heera/i.test(v.name)) || null;
+      u.rate = 1;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      console.error('Offline TTS failed:', e);
     }
   }
   window.speak = speak;
@@ -856,6 +891,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Offline class alerts from the timetable
+  if (window.dvsc.onClassAlert) {
+    window.dvsc.onClassAlert((a) => {
+      const to12 = (t) => { const [h, m] = t.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
+      const venue = [a.block, a.room ? `Room ${a.room}` : ''].filter(Boolean).join(', ');
+      addMessage(`📚 Vivek, **${a.title}** class ${a.minutesLeft} minute mein hai!\n🕒 ${to12(a.startTime)} – ${to12(a.endTime)}${venue ? `\n📍 ${venue}` : ''}`, 'assistant');
+      speak(`Vivek, ${a.minutesLeft} minute mein ${a.title} class hai, ${to12(a.startTime)} baje${venue ? `, ${venue} mein` : ''}.`);
+    });
+  }
+
   // Handle triggered reminders
   window.dvsc.onReminderTriggered((reminder) => {
     const msg = `â° Vivek, reminder alert: **${reminder.title}**\n${reminder.description || ''}`;
@@ -875,39 +920,122 @@ document.addEventListener('DOMContentLoaded', () => {
   
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
+  let editingTtId = null;
+  let lastTimetable = [];
+  const ttFields = {
+    day: () => document.getElementById('tt-day'),
+    category: () => document.getElementById('tt-category'),
+    startTime: () => document.getElementById('tt-start'),
+    endTime: () => document.getElementById('tt-end'),
+    title: () => document.getElementById('tt-title'),
+    block: () => document.getElementById('tt-block'),
+    room: () => document.getElementById('tt-room'),
+  };
+
+  function resetTimetableForm() {
+    editingTtId = null;
+    ttFields.title().value = '';
+    ttFields.startTime().value = '';
+    ttFields.endTime().value = '';
+    ttFields.block().value = '';
+    ttFields.room().value = '';
+    document.getElementById('tt-form-title').textContent = '🌸 New Timetable Entry';
+    saveTtBtn.textContent = 'Save Entry';
+    document.querySelectorAll('.tt-entry.editing').forEach(el => el.classList.remove('editing'));
+  }
+
+  function openTimetableEditor(entry) {
+    editingTtId = entry.id;
+    ttFields.day().value = entry.day;
+    ttFields.category().value = entry.category || 'other';
+    ttFields.startTime().value = entry.startTime;
+    ttFields.endTime().value = entry.endTime;
+    ttFields.title().value = entry.title;
+    ttFields.block().value = entry.block || '';
+    ttFields.room().value = entry.room || '';
+    document.getElementById('tt-form-title').textContent = '✏️ Edit Timetable Entry';
+    saveTtBtn.textContent = 'Update Entry';
+    timetableForm.style.display = 'block';
+    timetableForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    ttFields.title().focus();
+  }
+
   addTimetableBtn.addEventListener('click', () => {
+    resetTimetableForm();
     timetableForm.style.display = 'block';
   });
 
   cancelTtBtn.addEventListener('click', () => {
     timetableForm.style.display = 'none';
+    resetTimetableForm();
   });
 
   saveTtBtn.addEventListener('click', async () => {
-    const day = document.getElementById('tt-day').value;
-    const category = document.getElementById('tt-category').value;
-    const start = document.getElementById('tt-start').value;
-    const end = document.getElementById('tt-end').value;
-    const title = document.getElementById('tt-title').value;
+    const entry = {
+      day: ttFields.day().value,
+      category: ttFields.category().value,
+      startTime: ttFields.startTime().value,
+      endTime: ttFields.endTime().value,
+      title: ttFields.title().value.trim(),
+      block: ttFields.block().value.trim(),
+      room: ttFields.room().value.trim(),
+    };
 
-    if (!title || !start || !end) {
+    if (!entry.title || !entry.startTime || !entry.endTime) {
       window.dvsc.notify("Error", "Title, Start time, and End time are required.");
       return;
     }
+    if (entry.endTime <= entry.startTime) {
+      window.dvsc.notify("Error", "End time must be after start time.");
+      return;
+    }
 
-    await window.dvsc.addTimetableEntry({ day, category, startTime: start, endTime: end, title });
+    if (editingTtId) {
+      await window.dvsc.updateTimetableEntry(editingTtId, entry);
+    } else {
+      await window.dvsc.addTimetableEntry(entry);
+    }
+
     timetableForm.style.display = 'none';
-    
-    // Clear inputs
-    document.getElementById('tt-title').value = '';
-    document.getElementById('tt-start').value = '';
-    document.getElementById('tt-end').value = '';
-
+    resetTimetableForm();
     loadTimetable();
   });
 
+  // ── Put timetable on phone (.ics calendar export) ──
+  const phoneCalPanel = document.getElementById('phone-cal-panel');
+  const phoneCalStatus = document.getElementById('phone-cal-status');
+  document.getElementById('phone-cal-btn').addEventListener('click', () => {
+    phoneCalPanel.style.display = phoneCalPanel.style.display === 'none' ? 'block' : 'none';
+    document.getElementById('phone-cal-minutes').value = settings.classAlertMinutes || 15;
+    phoneCalStatus.textContent = '';
+  });
+  document.getElementById('phone-cal-close').addEventListener('click', () => {
+    phoneCalPanel.style.display = 'none';
+  });
+  async function exportPhoneCalendar(sendToWhatsApp) {
+    const opts = {
+      minutesBefore: parseInt(document.getElementById('phone-cal-minutes').value, 10) || 15,
+      until: document.getElementById('phone-cal-until').value || '',
+      sendToWhatsApp,
+    };
+    phoneCalStatus.textContent = sendToWhatsApp ? 'Sending to your WhatsApp...' : 'Creating file...';
+    try {
+      const res = await window.dvsc.exportTimetableICS(opts);
+      if (res.canceled) { phoneCalStatus.textContent = ''; return; }
+      if (!res.success) { phoneCalStatus.textContent = '⚠️ ' + res.error; return; }
+      phoneCalStatus.textContent = res.sentToWhatsApp
+        ? `✅ Sent ${res.count} classes to your own WhatsApp chat. Open it on your phone and tap the file.`
+        : `✅ Saved ${res.count} classes to ${res.filePath}. Follow the steps below to add it to your phone.`;
+    } catch (err) {
+      phoneCalStatus.textContent = '⚠️ ' + (err.message || err) + ' — if this says "No handler", restart SENJU (Settings → Restart App).';
+    }
+  }
+  document.getElementById('phone-cal-save').addEventListener('click', () => exportPhoneCalendar(false));
+  document.getElementById('phone-cal-wa').addEventListener('click', () => exportPhoneCalendar(true));
+
   async function loadTimetable() {
     const entries = await window.dvsc.getTimetable();
+    lastTimetable = entries;
     timetableGrid.innerHTML = '';
     
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
@@ -927,7 +1055,11 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="tt-entry cat-${e.category}">
             <div class="tt-time">${e.startTime} - ${e.endTime}</div>
             <div class="tt-title">${escapeHTML(e.title)}</div>
-            <button class="tt-delete" data-id="${e.id}" style="color: #ff4d4d; border: 1px solid #ff4d4d; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: bold; cursor: pointer;">Delete</button>
+            ${(e.block || e.room) ? `<div class="tt-venue">📍 ${escapeHTML([e.block, e.room ? 'Room ' + e.room : ''].filter(Boolean).join(' · '))}</div>` : ''}
+            <div class="tt-actions">
+              <button class="tt-edit" data-id="${e.id}">Edit</button>
+              <button class="tt-delete" data-id="${e.id}">Delete</button>
+            </div>
           </div>
         `;
       });
@@ -937,17 +1069,35 @@ document.addEventListener('DOMContentLoaded', () => {
       timetableGrid.appendChild(col);
     });
 
+    // Edit listeners
+    document.querySelectorAll('.tt-edit').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = e.target.closest('.tt-edit').getAttribute('data-id');
+        const entry = lastTimetable.find(x => x.id === id);
+        if (!entry) return;
+        document.querySelectorAll('.tt-entry.editing').forEach(el => el.classList.remove('editing'));
+        e.target.closest('.tt-entry').classList.add('editing');
+        openTimetableEditor(entry);
+      });
+    });
+
     // Delete listeners
     document.querySelectorAll('.tt-delete').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const targetBtn = e.target.closest('.tt-delete');
         if (!targetBtn) return;
         const id = targetBtn.getAttribute('data-id');
+        if (!confirm('Delete this timetable entry?')) return;
+        if (editingTtId === id) {
+          timetableForm.style.display = 'none';
+          resetTimetableForm();
+        }
         await window.dvsc.deleteTimetableEntry(id);
         loadTimetable();
       });
     });
   }
+
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Settings Logic
@@ -967,6 +1117,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 settingsApikey.value = settings.apiKey || '';
     settingsVoice.checked = settings.voiceEnabled;
     settingsLocation.checked = settings.locationEnabled;
+    document.getElementById('settings-class-alerts').checked = settings.classAlertsEnabled !== false;
+    document.getElementById('settings-class-alert-minutes').value = settings.classAlertMinutes || 15;
   }
 
   toggleApikeyBtn.addEventListener('click', () => {
@@ -982,8 +1134,11 @@ document.addEventListener('DOMContentLoaded', () => {
   saveSettingsBtn.addEventListener('click', async () => {
     const newSettings = {
       ...settings,
+      apiKey: settingsApikey.value.trim(),
             voiceEnabled: settingsVoice.checked,
-      locationEnabled: settingsLocation.checked
+      locationEnabled: settingsLocation.checked,
+      classAlertsEnabled: document.getElementById('settings-class-alerts').checked,
+      classAlertMinutes: Math.min(120, Math.max(1, parseInt(document.getElementById('settings-class-alert-minutes').value, 10) || 15)),
     };
     
     await window.dvsc.saveSettings(newSettings);
@@ -1976,7 +2131,9 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       var result = await window.dvsc.sendMessage(text);
       if (result.success) {
-        var reply = result.response || '...';
+        var reply = String(result.response || '...')
+          .replace(/\[(REMINDER|TIMETABLE|COMMAND)\][\s\S]*?\[\/\1\]/g, '').trim() || 'Ho gaya, Vivek.';
+        if (typeof window.senjuRefresh === 'function') window.senjuRefresh(result.refresh);
         setResponse(reply);
         setStatus('SPEAKING', 'jvoice-speaking');
         if (typeof window.speak === 'function') await window.speak(reply);
@@ -2128,7 +2285,7 @@ document.addEventListener('DOMContentLoaded', () => {
           window.dvsc && window.dvsc.createNewChat();
           setResponse('New session started.'); return;
         }
-        if (lower.indexOf('stop') !== -1 || lower.indexOf('chup') !== -1 || lower.indexOf('quiet') !== -1) {
+        if (text.length < 20 && (lower.indexOf('stop') !== -1 || lower.indexOf('chup') !== -1 || lower.indexOf('quiet') !== -1)) {
           if (typeof window.stopAudio === 'function') window.stopAudio();
           setResponse('Audio stopped.'); setStatus('STANDBY', 'jvoice-idle'); return;
         }

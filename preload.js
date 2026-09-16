@@ -117,6 +117,14 @@ contextBridge.exposeInMainWorld('dvsc', {
    */
   deleteTimetableEntry: (id) => ipcRenderer.invoke('delete-timetable-entry', id),
 
+  /**
+   * Update an existing timetable entry.
+   * @param {string} id - Entry ID
+   * @param {Object} updates - Fields to change { day, startTime, endTime, title, category, block, room }
+   * @returns {Promise<Object|null>} The updated entry
+   */
+  updateTimetableEntry: (id, updates) => ipcRenderer.invoke('update-timetable-entry', id, updates),
+
   // ─────────────────────────────────────────────────────────
   // Location
   // ─────────────────────────────────────────────────────────
@@ -176,6 +184,12 @@ contextBridge.exposeInMainWorld('dvsc', {
    * Register a callback for when a reminder is triggered by the scheduler.
    * @param {Function} callback - Called with (event, reminderData)
    */
+  exportTimetableICS: (opts) => ipcRenderer.invoke('export-timetable-ics', opts),
+
+  onClassAlert: (callback) => {
+    ipcRenderer.on('class-alert', (_event, alert) => callback(alert));
+  },
+
   onReminderTriggered: (callback) => {
     ipcRenderer.on('reminder-triggered', (_event, reminder) => {
       callback(reminder);

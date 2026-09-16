@@ -9,10 +9,11 @@
 
 ## ✨ Features
 
-### 🧠 Multi-Model AI Core
-- **Google Gemini API** (`gemini-1.5-pro`, `gemini-1.5-flash`) for fast and intelligent text generation.
-- **Groq API** (`llama-3.3-70b-versatile`) for ultra-fast conversational responses.
-- **Local LLM Support** via `node-llama-cpp` for offline, private AI processing (e.g., LLaMA 3 8B GGUF).
+### 🧠 AI Brain (Groq)
+- **Model chain with auto-fallback**: `openai/gpt-oss-120b` → `llama-3.3-70b-versatile` → `openai/gpt-oss-20b` → `llama-3.1-8b-instant`. Rate-limited models are skipped for a minute. Override the first choice with `settings.aiModel`.
+- **Native tool calling** (`modules/tools.js`): reminders, timetable, open apps, volume, YouTube, WhatsApp, shutdown (60s, cancellable) — no more fragile `[COMMAND]` text tags.
+- **Real answers**: live web search via `groq/compound-mini` and weather via Open-Meteo (no extra API keys).
+- **Long-term memory**: SENJU saves lasting facts about you (`remember_fact` / `forget_fact`) and uses them in every chat.
 
 ### 🌌 Immersive UI (SENJU Mode)
 - **3D Solar System Visualizer**: A fully interactive 3D canvas rendering a solar system where planets represent different file categories and directories.

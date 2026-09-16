@@ -1,3 +1,3 @@
 @echo off
 cd /d C:\Data\SENJU
-powershell -ExecutionPolicy Bypass -Command "npm start"
+start "" "C:\Data\SENJU\node_modules\electron\dist\electron.exe" "C:\Data\SENJU"
