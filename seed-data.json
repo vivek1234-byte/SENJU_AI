@@ -1,0 +1,309 @@
+{
+  "version": "gla-sem-2026-09-v3",
+  "source": "College portal screenshots (21–25 Sep 2026 timetable + Attendance By Subject)",
+  "portalUpTo": "2026-09-24",
+  "trackFrom": "2026-09-25",
+  "block": "AB - I",
+  "subjects": [
+    {
+      "code": "BCSC 0008",
+      "name": "Computer Networks",
+      "kind": "Theory",
+      "faculty": "Rahul Kushwaha, Sushil Kumar",
+      "held": 25,
+      "attended": 24
+    },
+    {
+      "code": "BCSC 0011",
+      "name": "Theory Of Automata & Formal Languages",
+      "kind": "Theory",
+      "faculty": "Nishant Singh",
+      "held": 24,
+      "attended": 24
+    },
+    {
+      "code": "BCSE 0021",
+      "name": "Application Build & Release Automation",
+      "kind": "Theory",
+      "faculty": "Garvit Dohere",
+      "held": 18,
+      "attended": 18
+    },
+    {
+      "code": "BCSE 1251",
+      "name": "Full Stack Using Scripting Technologies",
+      "kind": "Theory",
+      "faculty": "Yash Singh",
+      "held": 28,
+      "attended": 28
+    },
+    {
+      "code": "PCPH 0002",
+      "name": "Competitive Programming",
+      "kind": "Theory",
+      "faculty": "Yash Singh",
+      "held": 22,
+      "attended": 22
+    },
+    {
+      "code": "BCSE 0281",
+      "name": "Full Stack Using Scripting Technologies Lab",
+      "kind": "Practical",
+      "faculty": "Yash Singh",
+      "held": 24,
+      "attended": 24
+    },
+    {
+      "code": "BCSE 0821",
+      "name": "Application Build & Release Automation Lab",
+      "kind": "Practical",
+      "faculty": "Sonal Singh",
+      "held": 14,
+      "attended": 14
+    },
+    {
+      "code": "MBAM 0001",
+      "name": "Basic Course In Entrepreneurship",
+      "kind": "Practical",
+      "faculty": "Anurag Vishwakarma",
+      "held": 0,
+      "attended": 0
+    },
+    {
+      "code": "PGDH 0001",
+      "name": "Group Discussion & Personal Interview",
+      "kind": "Practical",
+      "faculty": "Abhinav Pachauri",
+      "held": 7,
+      "attended": 7
+    },
+    {
+      "code": "PQRH 0001",
+      "name": "Quant & Reasoning Aptitude",
+      "kind": "Practical",
+      "faculty": "Robin Gupta",
+      "held": 12,
+      "attended": 12
+    },
+    {
+      "code": "PVRH 0001",
+      "name": "Verbal Aptitude",
+      "kind": "Practical",
+      "faculty": "Sachin Pratap",
+      "held": 4,
+      "attended": 4
+    }
+  ],
+  "timetable": [
+    {
+      "day": "monday",
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "code": "BCSC 0008",
+      "room": "310"
+    },
+    {
+      "day": "monday",
+      "startTime": "11:00",
+      "endTime": "12:00",
+      "code": "BCSE 0821",
+      "room": "306"
+    },
+    {
+      "day": "monday",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "code": "BCSE 0821",
+      "room": "306"
+    },
+    {
+      "day": "monday",
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "code": "BCSE 0021",
+      "room": "319"
+    },
+    {
+      "day": "monday",
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "code": "PCPH 0002",
+      "room": "319"
+    },
+    {
+      "day": "monday",
+      "startTime": "17:00",
+      "endTime": "18:00",
+      "code": "PCPH 0002",
+      "room": "319"
+    },
+    {
+      "day": "tuesday",
+      "startTime": "11:00",
+      "endTime": "12:00",
+      "code": "BCSC 0011",
+      "room": "319"
+    },
+    {
+      "day": "tuesday",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "code": "PGDH 0001",
+      "room": "319"
+    },
+    {
+      "day": "tuesday",
+      "startTime": "14:00",
+      "endTime": "15:00",
+      "code": "BCSE 0281",
+      "room": "319"
+    },
+    {
+      "day": "tuesday",
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "code": "BCSE 0021",
+      "room": "319"
+    },
+    {
+      "day": "tuesday",
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "code": "BCSC 0008",
+      "room": "319"
+    },
+    {
+      "day": "tuesday",
+      "startTime": "17:00",
+      "endTime": "18:00",
+      "code": "MBAM 0001",
+      "room": "419"
+    },
+    {
+      "day": "wednesday",
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "code": "BCSE 0281",
+      "room": "319"
+    },
+    {
+      "day": "wednesday",
+      "startTime": "11:00",
+      "endTime": "12:00",
+      "code": "BCSE 0281",
+      "room": "319"
+    },
+    {
+      "day": "wednesday",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "code": "PQRH 0001",
+      "room": "319"
+    },
+    {
+      "day": "wednesday",
+      "startTime": "14:00",
+      "endTime": "15:00",
+      "code": "BCSC 0011",
+      "room": "319"
+    },
+    {
+      "day": "wednesday",
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "code": "BCSC 0008",
+      "room": "324"
+    },
+    {
+      "day": "wednesday",
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "code": "BCSE 1251",
+      "room": "310"
+    },
+    {
+      "day": "wednesday",
+      "startTime": "17:00",
+      "endTime": "18:00",
+      "code": "BCSE 1251",
+      "room": "310"
+    },
+    {
+      "day": "thursday",
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "code": "BCSE 1251",
+      "room": "319"
+    },
+    {
+      "day": "thursday",
+      "startTime": "11:00",
+      "endTime": "12:00",
+      "code": "BCSE 1251",
+      "room": "319"
+    },
+    {
+      "day": "thursday",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "code": "PQRH 0001",
+      "room": "319"
+    },
+    {
+      "day": "thursday",
+      "startTime": "14:00",
+      "endTime": "15:00",
+      "code": "BCSC 0008",
+      "room": "319"
+    },
+    {
+      "day": "thursday",
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "code": "BCSC 0011",
+      "room": "319"
+    },
+    {
+      "day": "thursday",
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "code": "PVRH 0001",
+      "room": "319"
+    },
+    {
+      "day": "thursday",
+      "startTime": "17:00",
+      "endTime": "18:00",
+      "code": "MBAM 0001",
+      "room": "419"
+    },
+    {
+      "day": "friday",
+      "startTime": "14:00",
+      "endTime": "15:00",
+      "code": "BCSC 0011",
+      "room": "319"
+    },
+    {
+      "day": "friday",
+      "startTime": "15:00",
+      "endTime": "16:00",
+      "code": "BCSE 0021",
+      "room": "319"
+    },
+    {
+      "day": "friday",
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "code": "PCPH 0002",
+      "room": "319"
+    },
+    {
+      "day": "friday",
+      "startTime": "17:00",
+      "endTime": "18:00",
+      "code": "PCPH 0002",
+      "room": "319"
+    }
+  ]
+}

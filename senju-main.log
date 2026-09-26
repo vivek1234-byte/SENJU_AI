@@ -1,0 +1,406 @@
+[2026-09-25T21:10:26.676Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-09-25T21:10:28.934Z] [Renderer WARN] Geolocation error: [object GeolocationPositionError] (file:///C:/Data/SENJU/renderer.js:145)
+[2026-09-25T21:16:39.290Z] === SENJU starting (pid 27916, electron 33.4.11, node 20.18.3) ===
+[2026-09-25T21:16:39.806Z] ipc chat-startup
+[2026-09-25T21:16:39.836Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-09-25T21:16:40.328Z] ipc tts-speak
+[2026-09-25T21:16:41.664Z] SLOW whatsapp.init: 1017ms
+[2026-09-25T21:16:41.673Z] ipc get-reminders
+[2026-09-25T21:16:41.675Z] ipc get-timetable
+[2026-09-25T21:16:41.678Z] ipc get-attendance
+[2026-09-25T21:16:41.688Z] ipc get-exams
+[2026-09-25T21:16:41.690Z] ipc train-info
+[2026-09-25T21:16:41.702Z] ipc train-watch-list
+[2026-09-25T21:16:41.704Z] ipc train-last-search
+[2026-09-25T21:16:42.128Z] [Renderer WARN] Geolocation error: [object GeolocationPositionError] (file:///C:/Data/SENJU/renderer.js:149)
+[2026-09-25T21:16:42.925Z] SLOW ipc tts-speak: 2597ms
+[2026-09-25T21:17:19.616Z] === SENJU starting (pid 3856, electron 33.4.11, node 20.18.3) ===
+[2026-09-25T21:17:20.067Z] ipc chat-startup
+[2026-09-25T21:17:20.097Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-09-25T21:17:21.724Z] ipc get-reminders
+[2026-09-25T21:17:21.725Z] ipc get-timetable
+[2026-09-25T21:17:21.726Z] ipc get-attendance
+[2026-09-25T21:17:21.732Z] ipc get-exams
+[2026-09-25T21:17:21.735Z] ipc train-info
+[2026-09-25T21:17:21.752Z] ipc train-watch-list
+[2026-09-25T21:17:21.755Z] ipc tts-speak
+[2026-09-25T21:17:21.765Z] ipc train-last-search
+[2026-09-25T21:17:22.204Z] [Renderer WARN] Geolocation error: [object GeolocationPositionError] (file:///C:/Data/SENJU/renderer.js:149)
+[2026-09-25T21:18:13.774Z] === SENJU starting (pid 5768, electron 33.4.11, node 20.18.3) ===
+[2026-09-25T21:18:14.228Z] ipc chat-startup
+[2026-09-25T21:18:14.258Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-09-25T21:18:14.738Z] ipc tts-speak
+[2026-09-25T21:18:16.019Z] ipc get-reminders
+[2026-09-25T21:18:16.021Z] ipc get-timetable
+[2026-09-25T21:18:16.023Z] ipc get-attendance
+[2026-09-25T21:18:16.032Z] ipc get-exams
+[2026-09-25T21:18:16.035Z] ipc train-info
+[2026-09-25T21:18:16.043Z] ipc train-watch-list
+[2026-09-25T21:18:16.050Z] ipc train-last-search
+[2026-09-25T21:18:16.591Z] [Renderer WARN] Geolocation error: [object GeolocationPositionError] (file:///C:/Data/SENJU/renderer.js:149)
+[2026-09-25T21:18:17.257Z] SLOW ipc tts-speak: 2519ms
+[2026-09-25T21:23:14.542Z] === SENJU starting (pid 32456, electron 33.4.11, node 20.18.3) ===
+[2026-09-25T21:23:14.843Z] task classAlerts.check
+[2026-09-25T21:23:15.045Z] ipc chat-startup
+[2026-09-25T21:23:15.071Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-09-25T21:23:15.877Z] task whatsapp.init
+[2026-09-25T21:23:15.890Z] ipc tts-speak
+[2026-09-25T21:23:16.709Z] ipc get-reminders
+[2026-09-25T21:23:16.710Z] ipc get-timetable
+[2026-09-25T21:23:16.711Z] ipc get-attendance
+[2026-09-25T21:23:16.717Z] ipc get-exams
+[2026-09-25T21:23:16.719Z] ipc train-info
+[2026-09-25T21:23:16.731Z] ipc train-watch-list
+[2026-09-25T21:23:16.734Z] ipc train-last-search
+[2026-09-25T21:23:17.227Z] [Renderer WARN] Geolocation error: [object GeolocationPositionError] (file:///C:/Data/SENJU/renderer.js:149)
+[2026-09-25T21:23:18.234Z] SLOW ipc tts-speak: 2344ms
+[2026-09-25T21:23:29.857Z] task attendance.check
+[2026-09-25T21:23:29.863Z] task trains.checkWatches
+[2026-09-25T21:23:34.857Z] task classAlerts.check
+[2026-09-25T21:23:34.863Z] task studyPlanner.check
+[2026-09-25T21:23:44.850Z] task reminders.check
+[2026-09-25T21:23:47.900Z] ipc train-search
+[2026-09-25T21:23:54.862Z] task classAlerts.check
+[2026-09-25T21:24:14.865Z] task reminders.check
+[2026-09-25T21:24:14.866Z] task attendance.check
+[2026-09-25T21:24:14.870Z] task studyPlanner.check
+[2026-09-25T21:24:14.872Z] task classAlerts.check
+[2026-09-25T21:24:24.161Z] ipc train-open-booking
+[2026-09-25T21:24:34.875Z] task classAlerts.check
+[2026-09-25T21:24:44.880Z] task reminders.check
+[2026-09-25T21:24:49.760Z] ipc train-live
+[2026-09-25T21:24:54.883Z] task classAlerts.check
+[2026-09-25T21:25:14.878Z] task attendance.check
+[2026-09-25T21:25:14.885Z] task studyPlanner.check
+[2026-09-25T21:25:14.895Z] task reminders.check
+[2026-09-25T21:25:14.898Z] task classAlerts.check
+[2026-09-25T21:25:34.912Z] task classAlerts.check
+[2026-09-25T21:25:44.906Z] task reminders.check
+[2026-09-25T21:25:54.922Z] task classAlerts.check
+[2026-09-25T21:26:01.901Z] ipc train-pnr
+[2026-09-25T21:26:14.777Z] ipc train-live
+[2026-09-25T21:26:14.882Z] task attendance.check
+[2026-09-25T21:26:14.884Z] task studyPlanner.check
+[2026-09-25T21:26:14.909Z] task reminders.check
+[2026-09-25T21:26:14.929Z] task classAlerts.check
+[2026-09-25T21:26:34.943Z] task classAlerts.check
+[2026-09-25T21:26:40.111Z] ipc train-open-booking
+[2026-09-25T21:26:44.918Z] task reminders.check
+[2026-09-25T21:26:45.252Z] ipc train-open-booking
+[2026-09-25T21:26:54.957Z] task classAlerts.check
+[2026-09-25T21:27:04.316Z] ipc train-open-booking
+[2026-09-25T21:27:14.886Z] task attendance.check
+[2026-09-25T21:27:14.892Z] task studyPlanner.check
+[2026-09-25T21:27:14.929Z] task reminders.check
+[2026-09-25T21:27:14.960Z] task classAlerts.check
+[2026-09-25T21:27:20.181Z] ipc window-close
+[2026-09-26T08:56:26.997Z] === SENJU starting (pid 33608, electron 33.4.11, node 20.18.3) ===
+[2026-09-26T08:56:29.525Z] task classAlerts.check
+[2026-09-26T08:56:30.064Z] ipc chat-startup
+[2026-09-26T08:56:31.526Z] ipc get-reminders
+[2026-09-26T08:56:31.526Z] ipc get-timetable
+[2026-09-26T08:56:31.527Z] ipc get-attendance
+[2026-09-26T08:56:31.531Z] ipc get-exams
+[2026-09-26T08:56:31.533Z] ipc train-info
+[2026-09-26T08:56:31.546Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-09-26T08:56:31.553Z] ipc train-watch-list
+[2026-09-26T08:56:31.554Z] ipc train-last-search
+[2026-09-26T08:56:32.324Z] [Renderer WARN] Geolocation error: [object GeolocationPositionError] (file:///C:/Data/SENJU/renderer.js:149)
+[2026-09-26T08:56:32.327Z] task whatsapp.init
+[2026-09-26T08:56:32.348Z] SLOW ipc chat-startup: 2284ms
+[2026-09-26T08:56:32.351Z] ipc tts-speak
+[2026-09-26T08:56:45.779Z] === SENJU starting (pid 7512, electron 33.4.11, node 20.18.3) ===
+[2026-09-26T08:56:46.017Z] task classAlerts.check
+[2026-09-26T08:56:46.202Z] ipc chat-startup
+[2026-09-26T08:56:46.229Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-09-26T08:56:46.965Z] ipc tts-speak
+[2026-09-26T08:56:47.042Z] task whatsapp.init
+[2026-09-26T08:56:49.906Z] SLOW whatsapp.init: 2863ms
+[2026-09-26T08:56:49.909Z] MAIN EVENT LOOP BLOCKED ~3116ms (last task: whatsapp.init)
+[2026-09-26T08:56:49.913Z] ipc get-reminders
+[2026-09-26T08:56:49.920Z] ipc get-timetable
+[2026-09-26T08:56:49.923Z] ipc get-attendance
+[2026-09-26T08:56:49.929Z] ipc get-exams
+[2026-09-26T08:56:49.932Z] ipc train-info
+[2026-09-26T08:56:49.938Z] ipc train-watch-list
+[2026-09-26T08:56:49.943Z] ipc train-last-search
+[2026-09-26T08:56:50.437Z] [Renderer WARN] Geolocation error: [object GeolocationPositionError] (file:///C:/Data/SENJU/renderer.js:149)
+[2026-09-26T08:56:52.298Z] SLOW ipc tts-speak: 5333ms
+[2026-09-26T08:57:00.713Z] ipc train-watch-check
+[2026-09-26T08:57:00.715Z] task trains.checkWatches
+[2026-09-26T08:57:01.033Z] task attendance.check
+[2026-09-26T08:57:01.040Z] task trains.checkWatches
+[2026-09-26T08:57:03.029Z] ipc train-watch-check
+[2026-09-26T08:57:03.031Z] task trains.checkWatches
+[2026-09-26T08:57:06.038Z] task classAlerts.check
+[2026-09-26T08:57:06.041Z] task studyPlanner.check
+[2026-09-26T08:57:16.020Z] task reminders.check
+[2026-09-26T08:57:26.053Z] task classAlerts.check
+[2026-09-26T08:57:29.906Z] ipc train-search
+[2026-09-26T08:57:46.026Z] task reminders.check
+[2026-09-26T08:57:46.028Z] task attendance.check
+[2026-09-26T08:57:46.042Z] task studyPlanner.check
+[2026-09-26T08:57:46.058Z] task classAlerts.check
+[2026-09-26T08:58:06.061Z] task classAlerts.check
+[2026-09-26T08:58:16.041Z] task reminders.check
+[2026-09-26T08:58:26.062Z] task classAlerts.check
+[2026-09-26T08:58:46.033Z] task attendance.check
+[2026-09-26T08:58:46.048Z] task reminders.check
+[2026-09-26T08:58:46.050Z] task studyPlanner.check
+[2026-09-26T08:58:46.064Z] task classAlerts.check
+[2026-09-26T08:59:06.078Z] task classAlerts.check
+[2026-09-26T08:59:16.054Z] task reminders.check
+[2026-09-26T08:59:26.087Z] task classAlerts.check
+[2026-09-26T08:59:46.040Z] task attendance.check
+[2026-09-26T08:59:46.057Z] task studyPlanner.check
+[2026-09-26T08:59:46.058Z] task reminders.check
+[2026-09-26T08:59:46.087Z] task classAlerts.check
+[2026-09-26T09:00:06.101Z] task classAlerts.check
+[2026-09-26T09:00:16.070Z] task reminders.check
+[2026-09-26T09:00:26.105Z] task classAlerts.check
+[2026-09-26T09:00:46.056Z] task attendance.check
+[2026-09-26T09:00:46.059Z] task studyPlanner.check
+[2026-09-26T09:00:46.071Z] task reminders.check
+[2026-09-26T09:00:46.119Z] task classAlerts.check
+[2026-09-26T09:00:58.952Z] ipc window-close
+[2026-09-26T09:05:14.923Z] === SENJU starting (pid 31856, electron 33.4.11, node 20.18.3) ===
+[2026-09-26T09:05:15.213Z] task classAlerts.check
+[2026-09-26T09:05:15.394Z] ipc chat-startup
+[2026-09-26T09:05:15.427Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-09-26T09:05:16.227Z] task whatsapp.init
+[2026-09-26T09:05:16.270Z] ipc tts-speak
+[2026-09-26T09:05:16.906Z] ipc get-reminders
+[2026-09-26T09:05:16.912Z] ipc get-timetable
+[2026-09-26T09:05:16.915Z] ipc get-attendance
+[2026-09-26T09:05:16.922Z] ipc get-exams
+[2026-09-26T09:05:16.926Z] ipc train-info
+[2026-09-26T09:05:16.931Z] ipc train-watch-list
+[2026-09-26T09:05:16.934Z] ipc train-last-search
+[2026-09-26T09:05:17.761Z] [Renderer WARN] Geolocation error: [object GeolocationPositionError] (file:///C:/Data/SENJU/renderer.js:149)
+[2026-09-26T09:05:19.396Z] SLOW ipc tts-speak: 3126ms
+[2026-09-26T09:05:30.233Z] task attendance.check
+[2026-09-26T09:05:30.239Z] task trains.checkWatches
+[2026-09-26T09:05:30.849Z] ipc train-live
+[2026-09-26T09:05:35.237Z] task classAlerts.check
+[2026-09-26T09:05:35.240Z] task studyPlanner.check
+[2026-09-26T09:05:40.089Z] SLOW ipc train-live: 9240ms
+[2026-09-26T09:05:45.225Z] task reminders.check
+[2026-09-26T09:05:55.247Z] task classAlerts.check
+[2026-09-26T09:06:15.224Z] task attendance.check
+[2026-09-26T09:06:15.237Z] task reminders.check
+[2026-09-26T09:06:15.245Z] task studyPlanner.check
+[2026-09-26T09:06:15.260Z] task classAlerts.check
+[2026-09-26T09:06:35.275Z] task classAlerts.check
+[2026-09-26T09:06:45.241Z] task reminders.check
+[2026-09-26T09:06:55.291Z] task classAlerts.check
+[2026-09-26T09:07:15.231Z] task attendance.check
+[2026-09-26T09:07:15.247Z] task reminders.check
+[2026-09-26T09:07:15.247Z] task studyPlanner.check
+[2026-09-26T09:07:15.294Z] task classAlerts.check
+[2026-09-26T09:07:35.295Z] task classAlerts.check
+[2026-09-26T09:07:41.135Z] ipc train-pnr
+[2026-09-26T09:07:45.248Z] task reminders.check
+[2026-09-26T09:07:51.729Z] SLOW ipc train-pnr: 10595ms
+[2026-09-26T09:07:55.307Z] task classAlerts.check
+[2026-09-26T09:08:15.238Z] task attendance.check
+[2026-09-26T09:08:15.255Z] task studyPlanner.check
+[2026-09-26T09:08:15.260Z] task reminders.check
+[2026-09-26T09:08:15.315Z] task classAlerts.check
+[2026-09-26T09:08:35.320Z] task classAlerts.check
+[2026-09-26T09:08:45.265Z] task reminders.check
+[2026-09-26T09:08:55.324Z] task classAlerts.check
+[2026-09-26T09:09:15.240Z] task attendance.check
+[2026-09-26T09:09:15.257Z] task studyPlanner.check
+[2026-09-26T09:09:15.265Z] task reminders.check
+[2026-09-26T09:09:15.336Z] task classAlerts.check
+[2026-09-26T09:09:35.337Z] task classAlerts.check
+[2026-09-26T09:09:45.275Z] task reminders.check
+[2026-09-26T09:09:55.344Z] task classAlerts.check
+[2026-09-26T09:10:15.254Z] task attendance.check
+[2026-09-26T09:10:15.262Z] task studyPlanner.check
+[2026-09-26T09:10:15.414Z] ipc get-exams
+[2026-09-26T09:10:15.436Z] ipc tts-speak
+[2026-09-26T09:10:15.447Z] task reminders.check
+[2026-09-26T09:10:15.450Z] task classAlerts.check
+[2026-09-26T09:10:18.925Z] SLOW ipc tts-speak: 3489ms
+[2026-09-26T09:10:35.464Z] task classAlerts.check
+[2026-09-26T09:10:45.449Z] task reminders.check
+[2026-09-26T09:10:55.470Z] task classAlerts.check
+[2026-09-26T09:11:15.260Z] task attendance.check
+[2026-09-26T09:11:15.275Z] task studyPlanner.check
+[2026-09-26T09:11:15.464Z] task reminders.check
+[2026-09-26T09:11:15.480Z] task classAlerts.check
+[2026-09-26T09:11:35.492Z] task classAlerts.check
+[2026-09-26T09:11:45.469Z] task reminders.check
+[2026-09-26T09:11:55.504Z] task classAlerts.check
+[2026-09-26T09:12:15.271Z] task attendance.check
+[2026-09-26T09:12:15.287Z] task studyPlanner.check
+[2026-09-26T09:12:15.476Z] task reminders.check
+[2026-09-26T09:12:15.505Z] task classAlerts.check
+[2026-09-26T09:12:35.513Z] task classAlerts.check
+[2026-09-26T09:12:45.483Z] task reminders.check
+[2026-09-26T09:12:55.525Z] task classAlerts.check
+[2026-09-26T09:13:15.283Z] task attendance.check
+[2026-09-26T09:13:15.298Z] task studyPlanner.check
+[2026-09-26T09:13:15.486Z] task reminders.check
+[2026-09-26T09:13:15.534Z] task classAlerts.check
+[2026-09-26T09:13:35.539Z] task classAlerts.check
+[2026-09-26T09:13:45.496Z] task reminders.check
+[2026-09-26T09:13:55.538Z] task classAlerts.check
+[2026-09-26T09:14:15.292Z] task attendance.check
+[2026-09-26T09:14:15.297Z] task studyPlanner.check
+[2026-09-26T09:14:15.498Z] task reminders.check
+[2026-09-26T09:14:15.544Z] task classAlerts.check
+[2026-09-26T09:14:35.554Z] task classAlerts.check
+[2026-09-26T09:14:45.510Z] task reminders.check
+[2026-09-26T09:14:55.564Z] task classAlerts.check
+[2026-09-26T09:15:15.297Z] task attendance.check
+[2026-09-26T09:15:15.299Z] task studyPlanner.check
+[2026-09-26T09:15:15.516Z] task reminders.check
+[2026-09-26T09:15:15.577Z] task classAlerts.check
+[2026-09-26T09:15:35.586Z] task classAlerts.check
+[2026-09-26T09:15:45.529Z] task reminders.check
+[2026-09-26T09:15:55.594Z] task classAlerts.check
+[2026-09-26T09:16:15.309Z] task attendance.check
+[2026-09-26T09:16:15.310Z] task studyPlanner.check
+[2026-09-26T09:16:15.542Z] task reminders.check
+[2026-09-26T09:16:15.605Z] task classAlerts.check
+[2026-09-26T09:16:35.617Z] task classAlerts.check
+[2026-09-26T09:16:45.547Z] task reminders.check
+[2026-09-26T09:16:55.622Z] task classAlerts.check
+[2026-09-26T09:17:15.311Z] task attendance.check
+[2026-09-26T09:17:15.314Z] task studyPlanner.check
+[2026-09-26T09:17:15.548Z] task reminders.check
+[2026-09-26T09:17:15.624Z] task classAlerts.check
+[2026-09-26T09:17:35.639Z] task classAlerts.check
+[2026-09-26T09:17:45.552Z] task reminders.check
+[2026-09-26T09:17:55.639Z] task classAlerts.check
+[2026-09-26T09:18:15.322Z] task attendance.check
+[2026-09-26T09:18:15.323Z] task studyPlanner.check
+[2026-09-26T09:18:15.558Z] task reminders.check
+[2026-09-26T09:18:15.653Z] task classAlerts.check
+[2026-09-26T09:18:35.662Z] task classAlerts.check
+[2026-09-26T09:18:45.562Z] task reminders.check
+[2026-09-26T09:18:55.678Z] task classAlerts.check
+[2026-09-26T09:19:15.336Z] task attendance.check
+[2026-09-26T09:19:15.338Z] task studyPlanner.check
+[2026-09-26T09:19:15.568Z] task reminders.check
+[2026-09-26T09:19:15.692Z] task classAlerts.check
+[2026-09-26T09:19:35.699Z] task classAlerts.check
+[2026-09-26T09:19:45.575Z] task reminders.check
+[2026-09-26T09:19:55.700Z] task classAlerts.check
+[2026-09-26T09:20:15.335Z] task attendance.check
+[2026-09-26T09:20:15.339Z] task studyPlanner.check
+[2026-09-26T09:20:15.584Z] task reminders.check
+[2026-09-26T09:20:15.710Z] task classAlerts.check
+[2026-09-26T09:20:35.725Z] task classAlerts.check
+[2026-09-26T09:20:45.594Z] task reminders.check
+[2026-09-26T09:20:55.730Z] task classAlerts.check
+[2026-09-26T09:34:57.992Z] === SENJU starting (pid 4260, electron 33.4.11, node 20.18.3) ===
+[2026-09-26T09:34:58.248Z] task classAlerts.check
+[2026-09-26T09:34:58.446Z] ipc chat-startup
+[2026-09-26T09:34:58.473Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-09-26T09:34:59.273Z] task whatsapp.init
+[2026-09-26T09:34:59.361Z] ipc tts-speak
+[2026-09-26T09:35:00.121Z] ipc get-reminders
+[2026-09-26T09:35:00.122Z] ipc get-timetable
+[2026-09-26T09:35:00.123Z] ipc get-attendance
+[2026-09-26T09:35:00.133Z] ipc get-exams
+[2026-09-26T09:35:00.138Z] ipc train-info
+[2026-09-26T09:35:00.145Z] ipc train-watch-list
+[2026-09-26T09:35:00.149Z] ipc train-last-search
+[2026-09-26T09:35:00.686Z] [Renderer WARN] Geolocation error: [object GeolocationPositionError] (file:///C:/Data/SENJU/renderer.js:149)
+[2026-09-26T09:35:03.092Z] SLOW ipc tts-speak: 3732ms
+[2026-09-26T09:35:13.271Z] task attendance.check
+[2026-09-26T09:35:13.275Z] task trains.checkWatches
+[2026-09-26T09:35:18.270Z] task classAlerts.check
+[2026-09-26T09:35:18.274Z] task studyPlanner.check
+[2026-09-26T09:35:25.475Z] ipc train-search
+[2026-09-26T09:35:28.263Z] task reminders.check
+[2026-09-26T09:35:29.253Z] SLOW ipc train-search: 3778ms
+[2026-09-26T09:35:38.281Z] task classAlerts.check
+[2026-09-26T09:35:40.920Z] ipc train-open-booking
+[2026-09-26T09:35:46.019Z] ipc train-open-booking
+[2026-09-26T09:35:58.262Z] task attendance.check
+[2026-09-26T09:35:58.266Z] task reminders.check
+[2026-09-26T09:35:58.268Z] task studyPlanner.check
+[2026-09-26T09:35:58.294Z] task classAlerts.check
+[2026-09-26T09:36:05.873Z] ipc train-open-booking
+[2026-09-26T09:36:18.309Z] task classAlerts.check
+[2026-09-26T09:36:28.274Z] task reminders.check
+[2026-09-26T09:36:38.323Z] task classAlerts.check
+[2026-09-26T09:36:58.271Z] task attendance.check
+[2026-09-26T09:36:58.278Z] task studyPlanner.check
+[2026-09-26T09:36:58.283Z] task reminders.check
+[2026-09-26T09:36:58.334Z] task classAlerts.check
+[2026-09-26T09:37:18.343Z] task classAlerts.check
+[2026-09-26T09:37:28.293Z] task reminders.check
+[2026-09-26T09:37:38.357Z] task classAlerts.check
+[2026-09-26T09:37:58.279Z] task attendance.check
+[2026-09-26T09:37:58.282Z] task studyPlanner.check
+[2026-09-26T09:37:58.295Z] task reminders.check
+[2026-09-26T09:37:58.361Z] task classAlerts.check
+[2026-09-26T09:38:15.104Z] ipc window-close

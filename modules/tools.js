@@ -118,6 +118,85 @@ const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'mark_attendance',
+      description: 'Record whether Vivek attended a class. Use when he says things like "DBMS attend kiya", "aaj Maths bunk kiya", or "class cancel ho gayi thi".',
+      parameters: {
+        type: 'object',
+        properties: {
+          subject: { type: 'string', description: 'Subject / class name as in the timetable.' },
+          status: { type: 'string', enum: ['present', 'absent', 'cancelled'] },
+          date: { type: 'string', description: 'YYYY-MM-DD. Defaults to today.' },
+        },
+        required: ['subject', 'status'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_attendance',
+      description: 'Attendance percentages per subject, how many classes he can still miss (or must attend) for his target, and classes not marked yet. Use for "meri attendance kitni hai", "kitni bunk kar sakta hu".',
+      parameters: {
+        type: 'object',
+        properties: { subject: { type: 'string', description: 'Optional — one subject only.' } },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_exam',
+      description: 'Save an exam with its date and (optionally) the topics/syllabus. SENJU then builds a study plan automatically. Use for "15 tarikh ko DBMS ka exam hai".',
+      parameters: {
+        type: 'object',
+        properties: {
+          subject: { type: 'string' },
+          date: { type: 'string', description: 'YYYY-MM-DD' },
+          time: { type: 'string', description: 'HH:mm, optional' },
+          topics: { type: 'array', items: { type: 'string' }, description: 'Syllabus topics, optional but makes the plan much better.' },
+          difficulty: { type: 'number', description: '1 = easy, 2 = normal, 3 = hard. Default 2.' },
+        },
+        required: ['subject', 'date'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_exams',
+      description: 'Upcoming exams with days left and study progress.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_study_plan',
+      description: 'The study sessions planned for a day (default today): time, subject and topic.',
+      parameters: {
+        type: 'object',
+        properties: { date: { type: 'string', description: 'YYYY-MM-DD, defaults to today.' } },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mark_study_done',
+      description: 'Mark today\'s study session for a subject as completed ("DBMS wala study ho gaya").',
+      parameters: {
+        type: 'object',
+        properties: {
+          subject: { type: 'string' },
+          date: { type: 'string', description: 'YYYY-MM-DD, defaults to today.' },
+        },
+        required: ['subject'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'open_app',
       description: 'Open an application on Vivek\'s Windows PC.',
       parameters: {
@@ -183,11 +262,11 @@ const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'send_whatsapp',
-      description: 'Send a WhatsApp message. Vivek must have given BOTH the contact and the exact message; if either is unclear, ask first instead of calling.',
+      description: 'Send a WhatsApp message. Call it as soon as Vivek has given a contact name (or number) and the message — do NOT ask him to confirm the name first; the tool finds the contact itself. Only if the tool replies that several contacts match, ask Vivek which one and call again with the name plus the last 4 digits it listed (e.g. "Shiva Singh 4521").',
       parameters: {
         type: 'object',
         properties: {
-          contact: { type: 'string', description: 'Contact name as saved in WhatsApp.' },
+          contact: { type: 'string', description: 'Contact name exactly as Vivek said it, a phone number, "myself", or name + last 4 digits when disambiguating.' },
           message: { type: 'string', description: 'Exact message text to send.' },
         },
         required: ['contact', 'message'],
@@ -223,6 +302,208 @@ const TOOL_DEFINITIONS = [
         type: 'object',
         properties: { match: { type: 'string' } },
         required: ['match'],
+      },
+    },
+  },
+  // ── Train travel agent ─────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'search_trains',
+      description: 'Find Indian Railways trains between two stations on a date with approximate fares per class, duration, cheapest/fastest tags, average fare and booking-site fee comparison. Live seat availability is included when a RapidAPI key is configured. Use for any "train / ticket / kitna lagega / kaunsi train" question.',
+      parameters: {
+        type: 'object',
+        properties: {
+          from: { type: 'string', description: 'Origin station name or code, e.g. "Agra" or "AGC".' },
+          to: { type: 'string', description: 'Destination station name or code, e.g. "Ahmedabad" or "ADI".' },
+          date: { type: 'string', description: 'Journey date YYYY-MM-DD (resolve "kal", "next Friday" etc. from the current date).' },
+          class: { type: 'string', description: 'Optional travel class: SL, 3A, 2A, 1A, 3E, CC, EC, 2S.' },
+          sort: { type: 'string', enum: ['price', 'duration', 'departure'], description: 'Sort order. Default: price when a class is given, else departure time.' },
+        },
+        required: ['from', 'to', 'date'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'check_train_availability',
+      description: 'Live seat availability / waitlist status for one train and class on a date (needs the RapidAPI key from Settings).',
+      parameters: {
+        type: 'object',
+        properties: {
+          train_no: { type: 'string', description: '5-digit train number' },
+          from: { type: 'string' }, to: { type: 'string' },
+          date: { type: 'string', description: 'YYYY-MM-DD' },
+          class: { type: 'string', description: 'SL, 3A, 2A, 1A, 3E, CC, EC or 2S' },
+          quota: { type: 'string', enum: ['GN', 'TQ', 'LD', 'SS'], description: 'GN general (default), TQ tatkal, LD ladies, SS senior citizen' },
+        },
+        required: ['train_no', 'from', 'to', 'date', 'class'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'compare_booking_sites',
+      description: 'Compare total payable on IRCTC, ConfirmTkt, ixigo, RailYatri, Paytm and MakeMyTrip for a given train fare (base fare is identical everywhere; only fees differ).',
+      parameters: {
+        type: 'object',
+        properties: { fare: { type: 'number', description: 'Base fare in rupees' } },
+        required: ['fare'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'open_train_booking',
+      description: 'Open a booking website in the browser with the search pre-filled so Vivek can log in and pay himself. Never books or pays on its own.',
+      parameters: {
+        type: 'object',
+        properties: {
+          from: { type: 'string' }, to: { type: 'string' },
+          date: { type: 'string', description: 'YYYY-MM-DD' },
+          class: { type: 'string' },
+          site: { type: 'string', enum: ['irctc', 'confirmtkt', 'ixigo', 'railyatri', 'paytm', 'mmt'], description: 'Default irctc (no agent fee).' },
+        },
+        required: ['from', 'to', 'date'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'watch_train_seat',
+      description: 'Keep checking a waitlisted train every ~20 minutes and alert Vivek (desktop + WhatsApp) the moment a seat/RAC opens. Needs the RapidAPI key.',
+      parameters: {
+        type: 'object',
+        properties: {
+          train_no: { type: 'string' }, train_name: { type: 'string' },
+          from: { type: 'string' }, to: { type: 'string' },
+          date: { type: 'string', description: 'YYYY-MM-DD' },
+          class: { type: 'string' },
+        },
+        required: ['train_no', 'from', 'to', 'date', 'class'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_train_watches',
+      description: 'List active seat watches with their last known status.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cancel_train_watch',
+      description: 'Stop a seat watch by id (from list_train_watches), or all of them.',
+      parameters: {
+        type: 'object',
+        properties: { id: { type: 'string', description: 'Watch id, or "all"' } },
+        required: ['id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_pnr_status',
+      description: 'Current PNR status (train, journey, coach/berth, CNF/RAC/WL per passenger, chart status). Takes ~10-20 seconds — it reads the live status page in a hidden browser.',
+      parameters: {
+        type: 'object',
+        properties: { pnr: { type: 'string', description: '10-digit PNR' } },
+        required: ['pnr'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'book_train',
+      description: 'Start the IRCTC booking agent: opens a visible Chrome, searches the train, selects class/date, clicks Book Now, fills passenger details from saved travellers and stops at the review/payment step for Vivek to enter captcha and pay. Vivek does IRCTC login himself when the agent asks. Returns immediately; progress arrives as status updates.',
+      parameters: {
+        type: 'object',
+        properties: {
+          from: { type: 'string' }, to: { type: 'string' },
+          date: { type: 'string', description: 'YYYY-MM-DD' },
+          class: { type: 'string', description: 'SL, 3A, 2A, 1A, 3E, CC, EC or 2S' },
+          train_no: { type: 'string', description: '5-digit train number (recommended)' },
+          train_name: { type: 'string' },
+          travellers: { type: 'array', items: { type: 'string' }, description: 'Saved traveller names, e.g. ["Vivek","Papa"]. Empty = the self profile.' },
+          mobile: { type: 'string', description: 'Optional 10-digit mobile for the booking' },
+          upi_only: { type: 'boolean', description: 'Prefer the BHIM/UPI payment option on the passenger page' },
+        },
+        required: ['from', 'to', 'date', 'class'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'booking_status',
+      description: 'Current state of the IRCTC booking agent (idle, running, need_user, handoff, error).',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cancel_booking',
+      description: 'Stop the IRCTC booking agent.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_traveller',
+      description: 'Save a traveller profile used by the booking agent (name, age, gender, berth preference). Use is_self=true for Vivek himself.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Full name as on ID' },
+          age: { type: 'integer' },
+          gender: { type: 'string', enum: ['M', 'F', 'T'] },
+          berth: { type: 'string', enum: ['LB', 'MB', 'UB', 'SL', 'SU', 'NP'], description: 'Lower/Middle/Upper/Side Lower/Side Upper/No preference' },
+          alias: { type: 'string', description: 'How Vivek refers to them, e.g. "papa", "mummy", "bhai"' },
+          is_self: { type: 'boolean' },
+        },
+        required: ['name', 'age', 'gender'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_travellers',
+      description: 'List saved traveller profiles.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'remove_traveller',
+      description: 'Delete a saved traveller by name.',
+      parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'train_live_status',
+      description: 'Live running status: where a train is right now, delay, next station and ETA. Takes ~10-20 seconds — it reads the live status page in a hidden browser.',
+      parameters: {
+        type: 'object',
+        properties: {
+          train_no: { type: 'string', description: '5-digit train number' },
+          start_day: { type: 'integer', description: '0 = started today, 1 = started yesterday, 2 = day before' },
+        },
+        required: ['train_no'],
       },
     },
   },
@@ -419,6 +700,57 @@ class ToolExecutor {
           .join('\n');
       }
 
+      case 'mark_attendance': {
+        const { record, stats } = d.attendance.mark({ subject: args.subject, status: args.status, date: args.date });
+        ctx.refresh.add('attendance');
+        const pctText = stats.pct == null ? '' : ` ${stats.subject}: ${stats.pct}% (${stats.present}/${stats.total}). ${stats.advice}.`;
+        return `Marked ${record.subject} as ${record.status} on ${record.date}.${pctText}`;
+      }
+
+      case 'get_attendance': {
+        const o = d.attendance.getOverview();
+        if (args.subject) {
+          const s = d.attendance.getSubjectStats(args.subject);
+          return `${s.subject}: ${s.pct == null ? 'nothing marked yet' : `${s.pct}% (${s.present}/${s.total})`}. Target ${o.target}%. ${s.advice}.`;
+        }
+        if (!o.subjects.length) return 'No attendance data yet.';
+        const lines = o.subjects.map((s) => `- ${s.subject}: ${s.pct == null ? 'not marked' : `${s.pct}% (${s.present}/${s.total})`} — ${s.advice}`);
+        const pend = o.pending.length ? `\nNot marked yet: ${o.pending.slice(0, 5).map((p) => `${p.subject} (${p.date})`).join(', ')}` : '';
+        return `Target ${o.target}%. Overall ${o.overallPct == null ? '—' : o.overallPct + '%'}\n${lines.join('\n')}${pend}`;
+      }
+
+      case 'add_exam': {
+        const ex = d.studyPlanner.addExam(args);
+        ctx.refresh.add('exams');
+        const saved = d.studyPlanner.getOverview().exams.find((e) => e.id === ex.id);
+        const days = saved ? saved.daysLeft : 0;
+        const today = d.studyPlanner.getPlanText();
+        return `Exam saved: ${ex.subject} on ${ex.date}${ex.time ? ' at ' + ex.time : ''} (${days === 0 ? 'today' : days + ' day(s) away'}). Study plan updated.\nToday's plan:\n${today}`;
+      }
+
+      case 'list_exams': {
+        const o = d.studyPlanner.getOverview();
+        if (!o.exams.length) return 'No exams saved.';
+        return o.exams
+          .map((e) => `- ${e.subject}: ${e.date}${e.time ? ' ' + e.time : ''} — ${e.daysLeft < 0 ? 'done' : e.daysLeft + ' day(s) left'}, study ${e.sessionsDone}/${e.sessionsPlanned} sessions${e.topics.length ? `, topics: ${e.topics.slice(0, 6).join(', ')}` : ''}`)
+          .join('\n');
+      }
+
+      case 'get_study_plan':
+        return d.studyPlanner.getPlanText(args.date);
+
+      case 'mark_study_done': {
+        const o = d.studyPlanner.getOverview();
+        const day = args.date || (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; })();
+        const list = [...o.today, ...o.next7].filter(
+          (s) => s.date === day && s.subject.toLowerCase().includes(String(args.subject).toLowerCase()) && !s.done
+        );
+        if (!list.length) return `No pending study session for ${args.subject} on ${day}.`;
+        d.studyPlanner.setSessionDone(list[0].id, true);
+        ctx.refresh.add('exams');
+        return `Marked done: ${list[0].subject} — ${list[0].topic} (${list[0].start}).`;
+      }
+
       case 'open_app':
         return runSystemCommand({ action: 'open_app', target: args.app }, d);
       case 'set_volume':
@@ -456,36 +788,147 @@ class ToolExecutor {
         return `Removed ${mem.length - kept.length} memory item(s).`;
       }
 
+      // ── Trains ─────────────────────────────────────────────
+      case 'search_trains': {
+        if (!d.trains) throw new Error('Train agent not available.');
+        const r = await d.trains.search({ from: args.from, to: args.to, date: args.date, cls: args.class, sort: args.sort });
+        ctx.refresh.add('travel');
+        d.trains.lastSearch = r;
+        d.trains.emit('train-search-result', r); // Travel tab shows the full list
+        return d.trains.formatSearchForModel(r);
+      }
+
+      case 'check_train_availability': {
+        const a = await d.trains.availability({ trainNo: args.train_no, from: args.from, to: args.to, date: args.date, cls: args.class, quota: args.quota || 'GN' });
+        return `${args.train_no} ${args.from}→${args.to} ${args.date} ${a.cls}/${a.quota}: ${a.text}${a.probability != null ? ` (confirm chance ${a.probability}%)` : ''}${a.fare ? `, fare ₹${a.fare}` : ''}.`;
+      }
+
+      case 'compare_booking_sites': {
+        const c = d.trains.compareSites(args.fare);
+        return `For a ₹${c.fare} fare: ${c.rows.map((s) => `${s.name} ₹${s.total} (+₹${s.extra})`).join(', ')}. ${c.note}`;
+      }
+
+      case 'open_train_booking': {
+        const info = d.trains.openBooking({ from: args.from, to: args.to, date: args.date, cls: args.class, site: args.site || 'irctc' });
+        return `Opened ${info.site} for ${info.from}→${info.to} on ${info.date}${info.prefill ? ' with the search pre-filled' : ' (IRCTC does not accept pre-filled searches — enter stations and date there)'}. Vivek must log in, pick the train and pay himself; SENJU never enters OTP, captcha or payment.`;
+      }
+
+      case 'watch_train_seat': {
+        const w = d.trains.addWatch({ trainNo: args.train_no, trainName: args.train_name, from: args.from, to: args.to, date: args.date, cls: args.class });
+        ctx.refresh.add('travel');
+        return `Watching ${w.trainNo} ${w.trainName || ''} ${w.from}→${w.to} on ${w.date} (${w.cls}). I check every 20 minutes and will alert on desktop and WhatsApp when a seat or RAC opens. Watch id: ${w.id}.`;
+      }
+
+      case 'list_train_watches': {
+        const list = d.trains.getWatches().filter((w) => w.active);
+        if (!list.length) return 'No active seat watches.';
+        return list.map((w) => `- [${w.id}] ${w.trainNo} ${w.trainName || ''} ${w.from}→${w.to} ${w.date} ${w.cls}: ${w.lastText || 'not checked yet'}${w.lastCheckedAt ? ` (checked ${new Date(w.lastCheckedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })})` : ''}`).join('\n');
+      }
+
+      case 'cancel_train_watch': {
+        const id = String(args.id || '').trim();
+        if (id.toLowerCase() === 'all') {
+          const n = d.trains.getWatches().length;
+          d.trains.saveWatches([]);
+          ctx.refresh.add('travel');
+          return `Removed ${n} watch(es).`;
+        }
+        const res = d.trains.removeWatch(id);
+        ctx.refresh.add('travel');
+        return res.removed ? 'Watch removed.' : `No watch with id ${id}.`;
+      }
+
+      case 'get_pnr_status': {
+        const p = await d.trains.pnrStatus(args.pnr);
+        if (p.invalid) return `PNR ${p.pnr}: ${p.raw}`;
+        const pax = p.passengers.map((x) => `P${x.no}: ${x.current || x.booking}${x.coach ? ` (${x.coach}${x.berth ? '/' + x.berth : ''})` : ''}${x.confirmChance ? `, confirm chance ${x.confirmChance}` : ''}`).join('; ');
+        const chart = p.chartPrepared == null ? '' : ` Chart: ${p.chartPrepared === true || /prepared|yes/i.test(String(p.chartPrepared)) ? 'prepared' : 'not prepared'}.`;
+        const head = [p.train, p.from && p.to ? `${p.from} → ${p.to}` : '', p.date, p.cls].filter(Boolean).join(' · ');
+        return `PNR ${p.pnr} (${p.source}): ${head || 'details not parsed'}. ${pax || (p.raw ? `Page text:\n${p.raw}` : 'No passenger rows found.')}${chart}${p.note ? ` ${p.note}` : ''}`;
+      }
+
+      case 'book_train': {
+        if (!d.booking) throw new Error('Booking agent not available.');
+        const st = await d.booking.book({ from: args.from, to: args.to, date: args.date, cls: args.class, trainNo: args.train_no, trainName: args.train_name, travellers: args.travellers || [], mobile: args.mobile, upiOnly: !!args.upi_only });
+        ctx.refresh.add('travel');
+        const pax = st.job.travellers.map((t) => t.name).join(', ');
+        return `Booking agent started for ${st.job.trainNo || 'best train'} ${st.job.from}→${st.job.to} on ${st.job.date} (${st.job.cls}) for ${pax}. A Chrome window is opening; it will ask Vivek to log in to IRCTC (user ID, password, captcha) and then fill everything up to the review/payment page. Tell Vivek to watch for the login prompt; do not claim the ticket is booked.`;
+      }
+
+      case 'booking_status': {
+        const st = d.booking.getStatus();
+        if (st.state === 'idle') return 'Booking agent is idle.';
+        return `Booking agent: ${st.state} — ${st.message} (step ${st.step}). Last actions: ${(st.history || []).slice(-4).map((h) => h.reason || h.action).join('; ') || 'none'}.`;
+      }
+
+      case 'cancel_booking': {
+        const st = await d.booking.cancel();
+        ctx.refresh.add('travel');
+        return `Booking agent ${st.state}.`;
+      }
+
+      case 'add_traveller': {
+        const t = d.booking.addTraveller({ name: args.name, age: args.age, gender: args.gender, berth: args.berth, alias: args.alias, isSelf: !!args.is_self });
+        ctx.refresh.add('travel');
+        return `Saved traveller: ${t.name}, ${t.age}, ${t.gender}, berth ${t.berth}${t.alias ? ` (${t.alias})` : ''}${t.isSelf ? ' (self)' : ''}.`;
+      }
+
+      case 'list_travellers': {
+        const list = d.booking.getTravellers();
+        if (!list.length) return 'No travellers saved yet.';
+        return list.map((t) => `- ${t.name}: ${t.age} ${t.gender}, berth ${t.berth}${t.alias ? ` (${t.alias})` : ''}${t.isSelf ? ' (self)' : ''}`).join('\n');
+      }
+
+      case 'remove_traveller': {
+        const r = d.booking.removeTraveller(args.name);
+        ctx.refresh.add('travel');
+        return r.removed ? `Removed ${args.name}.` : `No traveller named ${args.name}.`;
+      }
+
+      case 'train_live_status': {
+        const s = await d.trains.liveStatus(args.train_no, args.start_day || 0);
+        const up = s.upcoming.length ? ` Upcoming: ${s.upcoming.map((u) => `${u.name}${u.eta ? ' ' + u.eta : ''}${u.delay ? ` (${u.delay})` : ''}`).join(', ')}.` : '';
+        if (!s.status && !s.currentStation && s.raw) return `${s.trainNo} live status page text (${s.source}):\n${s.raw}`;
+        return `${s.trainNo} ${s.trainName} (${s.source}): ${s.status || 'status unknown'}${s.currentStation ? ` · at ${s.currentStation}` : ''}${s.delayMin != null ? ` · delay ${s.delayMin} min` : ''}${s.nextStation ? ` · next ${s.nextStation}${s.eta ? ' ETA ' + s.eta : ''}` : ''}${s.lastUpdated ? ` (updated ${s.lastUpdated})` : ''}.${s.note ? ` ${s.note}` : ''}${up}`;
+      }
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
   }
 
-  /** Web search via Groq's compound-mini (has built-in live web search, same API key). */
+  /** Web search using Groq's built-in browser_search tool (gpt-oss models). */
   async webSearch(query) {
     const apiKey = this.deps.getApiKey();
-    const body = {
-      model: 'groq/compound-mini',
-      messages: [
-        { role: 'system', content: `Today is ${new Date().toDateString()}. Search the web and give a factual, concise answer (max ~150 words) with key numbers and dates. Mention source site names.` },
-        { role: 'user', content: query },
-      ],
-      temperature: 0.2,
-      max_tokens: 700,
-    };
-    const tryModel = async (model) => {
+    const ask = async (model) => {
       const data = await fetchJSON('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...body, model }),
-      }, 30000);
-      return data.choices?.[0]?.message?.content || '';
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: `Today is ${new Date().toDateString()}. Search the web and answer factually in under 150 words, with key numbers, dates and the source site names.` },
+            { role: 'user', content: query },
+          ],
+          tools: [{ type: 'browser_search' }],
+          tool_choice: 'required',
+          temperature: 1,
+          reasoning_effort: 'low',
+          max_tokens: 900,
+        }),
+      }, 45000);
+      return (data.choices?.[0]?.message?.content || '').trim();
     };
+
     try {
-      return (await tryModel('groq/compound-mini')) || 'No results.';
+      return (await ask('openai/gpt-oss-120b')) || 'No results.';
     } catch (e) {
-      console.warn('[SENJU Tools] compound-mini failed, trying compound:', e.message);
-      return (await tryModel('groq/compound')) || 'No results.';
+      console.warn('[SENJU Tools] browser search on 120b failed:', e.message);
+      try {
+        return (await ask('openai/gpt-oss-20b')) || 'No results.';
+      } catch (e2) {
+        return `Web search unavailable right now (${String(e2.message).slice(0, 120)}). Answer from what you know and say it may be outdated.`;
+      }
     }
   }
 

@@ -2,6 +2,10 @@
 // DVSC Frontend Renderer Logic
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+// Surface renderer errors in senju-main.log (main logs console errors/warnings)
+window.addEventListener('error', (e) => console.error('[Renderer error]', e.message, e.filename + ':' + e.lineno));
+window.addEventListener('unhandledrejection', (e) => console.error('[Renderer rejection]', e.reason && (e.reason.stack || e.reason.message || e.reason)));
+
 document.addEventListener('DOMContentLoaded', () => {
   // Check if dvsc API is available
   if (!window.dvsc) {
@@ -94,6 +98,9 @@ document.addEventListener('DOMContentLoaded', () => {
     loadChatsList();
     loadReminders();
     loadTimetable();
+    loadAttendance();
+    loadExams();
+    loadTravel();
     if (settings.locationEnabled) {
       requestPreciseLocation();
     }
@@ -355,6 +362,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!Array.isArray(list)) return;
     if (list.includes('reminders')) loadReminders();
     if (list.includes('timetable')) loadTimetable();
+    if (list.includes('attendance')) loadAttendance();
+    if (list.includes('exams')) loadExams();
+    if (list.includes('travel')) loadTravel();
   }
   window.senjuRefresh = refreshPanels;
 
@@ -423,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${settings.apiKey}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                model: 'llama-3.1-8b-instant',
+                model: 'openai/gpt-oss-20b',
                 messages: [{
                   role: 'user',
                   content: `Convert this Hindi/Devanagari text to Roman script Hinglish ONLY. Do not translate to English. Keep the same words, just change script. Output ONLY the Roman Hinglish text, nothing else.\n\nInput: ${rawText}`
@@ -1053,8 +1063,9 @@ document.addEventListener('DOMContentLoaded', () => {
       dayEntries.forEach(e => {
         html += `
           <div class="tt-entry cat-${e.category}">
-            <div class="tt-time">${e.startTime} - ${e.endTime}</div>
+            <div class="tt-time">${e.startTime} - ${e.endTime}${e.code ? ` · ${escapeHTML(e.code)}` : ''}</div>
             <div class="tt-title">${escapeHTML(e.title)}</div>
+            ${e.faculty ? `<div class="tt-faculty">👤 ${escapeHTML(e.faculty)}</div>` : ''}
             ${(e.block || e.room) ? `<div class="tt-venue">📍 ${escapeHTML([e.block, e.room ? 'Room ' + e.room : ''].filter(Boolean).join(' · '))}</div>` : ''}
             <div class="tt-actions">
               <button class="tt-edit" data-id="${e.id}">Edit</button>
@@ -1119,6 +1130,17 @@ document.addEventListener('DOMContentLoaded', () => {
     settingsLocation.checked = settings.locationEnabled;
     document.getElementById('settings-class-alerts').checked = settings.classAlertsEnabled !== false;
     document.getElementById('settings-class-alert-minutes').value = settings.classAlertMinutes || 15;
+    const rk = document.getElementById('settings-rapidapi');
+    if (rk) rk.value = settings.rapidApiKey || '';
+  }
+
+  const toggleRapidBtn = document.getElementById('toggle-rapidapi');
+  if (toggleRapidBtn) {
+    toggleRapidBtn.addEventListener('click', () => {
+      const el = document.getElementById('settings-rapidapi');
+      el.type = el.type === 'password' ? 'text' : 'password';
+      toggleRapidBtn.textContent = el.type === 'password' ? 'Show' : 'Hide';
+    });
   }
 
   toggleApikeyBtn.addEventListener('click', () => {
@@ -1139,6 +1161,7 @@ document.addEventListener('DOMContentLoaded', () => {
       locationEnabled: settingsLocation.checked,
       classAlertsEnabled: document.getElementById('settings-class-alerts').checked,
       classAlertMinutes: Math.min(120, Math.max(1, parseInt(document.getElementById('settings-class-alert-minutes').value, 10) || 15)),
+      rapidApiKey: (document.getElementById('settings-rapidapi') || {}).value ? document.getElementById('settings-rapidapi').value.trim() : '',
     };
     
     await window.dvsc.saveSettings(newSettings);
@@ -1147,6 +1170,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (settings.locationEnabled) {
       requestPreciseLocation();
     }
+    loadTravel();
     
     // Add confirmation message in chat
     addMessage("Settings updated successfully.", 'assistant');
@@ -1168,86 +1192,791 @@ document.addEventListener('DOMContentLoaded', () => {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // WhatsApp Logic
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────────────────────────────────────────
+  // Attendance Tracker
+  // ─────────────────────────────────────────────────────────────
+  const attTargetInput = document.getElementById('att-target');
+  const attPendingCard = document.getElementById('att-pending-card');
+  const attPendingList = document.getElementById('att-pending-list');
+  const attSubjectWrap = document.getElementById('att-subject-list-wrap');
+  const attRecent = document.getElementById('att-recent');
+  const attManualForm = document.getElementById('att-manual-form');
+  const attTrashCard = document.getElementById('att-trash-card');
+  const attTrashList = document.getElementById('att-trash-list');
+  const attSubjectDatalist = document.getElementById('att-subject-list');
+  let attendanceData = null;
+
+  const todayKey = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const prettyDate = (dk) => {
+    if (dk === todayKey()) return 'today';
+    const d = new Date(dk + 'T12:00');
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  };
+
+  async function loadAttendance() {
+    attendanceData = await window.dvsc.getAttendance();
+    attTargetInput.value = attendanceData.target;
+
+    // subject suggestions (shared with the exam form)
+    attSubjectDatalist.innerHTML = attendanceData.subjects.map((x) => `<option value="${escapeHTML(x.subject)}">`).join('');
+
+    // pending
+    const pending = attendanceData.pending || [];
+    const fromLine = attendanceData.trackFrom
+      ? `Counting classes from <b>${prettyDate(attendanceData.trackFrom)}</b> — everything before that is in the portal totals. <button class="att-btn" id="att-change-from">Change</button>`
+      : `Counting every class in the timetable. <button class="att-btn" id="att-change-from">Start from a date</button>`;
+    attPendingCard.style.display = pending.length ? 'block' : 'none';
+    attPendingList.innerHTML = pending.map((p) => `
+      <div class="att-row">
+        <div>
+          <div class="att-name">${escapeHTML(p.subject)}</div>
+          <div class="att-meta">${prettyDate(p.date)} · ${p.startTime}–${p.endTime}${p.room ? ' · Room ' + escapeHTML(p.room) : ''}</div>
+        </div>
+        <div class="att-actions">
+          <button class="att-btn present" data-mark="present" data-subject="${escapeHTML(p.subject)}" data-date="${p.date}" data-start="${p.startTime}" data-entry="${p.entryId}">✅ Present</button>
+          <button class="att-btn absent" data-mark="absent" data-subject="${escapeHTML(p.subject)}" data-date="${p.date}" data-start="${p.startTime}" data-entry="${p.entryId}">❌ Absent</button>
+          <button class="att-btn cancel" data-mark="cancelled" data-subject="${escapeHTML(p.subject)}" data-date="${p.date}" data-start="${p.startTime}" data-entry="${p.entryId}">🚫 Cancelled</button>
+        </div>
+      </div>`).join('') + `<div class="att-advice" style="margin-top:8px;">${fromLine}</div>`;
+
+    // subjects
+    const subs = attendanceData.subjects || [];
+    attSubjectWrap.innerHTML = subs.length ? subs.map((s) => `
+      <div class="att-row">
+        <div class="att-name">${escapeHTML(s.subject)}</div>
+        <div class="att-bar att-${s.level}"><span style="width:${s.pct == null ? 0 : Math.min(100, s.pct)}%"></span></div>
+        <div class="att-pct">${s.pct == null ? '—' : s.pct + '%'}</div>
+        <div class="att-meta">${s.present}/${s.total}${s.cancelled ? ` (+${s.cancelled} cancelled)` : ''}</div>
+        <div class="att-actions">
+          <button class="att-btn" data-edit-base="${escapeHTML(s.subject)}" data-held="${s.baseline ? s.baseline.held : 0}" data-attended="${s.baseline ? s.baseline.attended : 0}">Edit portal total</button>
+          <button class="att-btn" data-ignore="${escapeHTML(s.subject)}">Don't track</button>
+        </div>
+        <div class="att-advice">${s.code ? escapeHTML(s.code) + ' · ' : ''}portal ${s.baseline ? s.baseline.attended + '/' + s.baseline.held : '0/0'}${s.marked && (s.marked.present || s.marked.absent) ? ` + marked here ${s.marked.present}✅ ${s.marked.absent}❌` : ''}</div>
+        <div class="att-advice ${s.level}">${escapeHTML(s.advice)}</div>
+      </div>`).join('') + (attendanceData.overallPct != null
+        ? `<div class="att-advice" style="margin-top:10px;">Overall: <b>${attendanceData.overallPct}%</b> across all subjects</div>` : '')
+      : '<div class="empty-hint">Add classes in the Timetable tab — SENJU will ask after each one.</div>';
+
+    if (attendanceData.ignored && attendanceData.ignored.length) {
+      attSubjectWrap.innerHTML += `<div class="att-advice" style="margin-top:8px;">Not tracked: ${attendanceData.ignored.map(escapeHTML).join(', ')} ${attendanceData.ignored.map((n) => `<button class="att-btn" data-ignore="${escapeHTML(n)}">undo</button>`).join(' ')}</div>`;
+    }
+
+    // recent
+    const recent = attendanceData.recent || [];
+    if (!pending.length) attSubjectWrap.innerHTML += `<div class="att-advice" style="margin-top:8px;">${fromLine}</div>`;
+
+    attRecent.innerHTML = (recent.length ? recent.map((r) => `
+      <div class="att-row">
+        <div class="att-name">${escapeHTML(r.subject)}</div>
+        <div class="att-meta">${prettyDate(r.date)}${r.startTime ? ' · ' + r.startTime : ''}</div>
+        <div class="att-meta">${r.status === 'present' ? '✅ Present' : r.status === 'absent' ? '❌ Absent' : '🚫 Cancelled'}</div>
+        <div class="att-actions"><button class="att-btn absent" data-del-att="${r.id}">Delete</button></div>
+      </div>`).join('')
+      : '<div class="empty-hint">Nothing marked here yet. Portal totals are kept separately above.</div>')
+      + '<div class="empty-hint">Deleting a row here only removes that one class — your imported portal totals never change.</div>';
+
+    // recently deleted → undo
+    const trash = attendanceData.trash || [];
+    attTrashCard.style.display = trash.length ? 'block' : 'none';
+    attTrashList.innerHTML = trash.map((r) => `
+      <div class="att-row">
+        <div class="att-name">${escapeHTML(r.subject)}</div>
+        <div class="att-meta">${prettyDate(r.date)}${r.startTime ? ' · ' + r.startTime : ''} · ${r.status}</div>
+        <div class="att-actions"><button class="att-btn present" data-restore-att="${r.id}">↩ Undo</button></div>
+      </div>`).join('');
+  }
+
+  async function markAttendance(payload) {
+    const res = await window.dvsc.markAttendance(payload);
+    if (res && res.success === false) {
+      window.dvsc.notify('Attendance', res.error);
+      return;
+    }
+    await loadAttendance();
+    const st = res.stats;
+    if (st && st.pct != null && (st.level === 'danger' || st.level === 'warning')) {
+      const msg = `⚠️ ${st.subject} attendance ${st.pct}% — ${st.advice}`;
+      addMessage(msg, 'assistant');
+      speak(`${st.subject} attendance ${st.pct} percent hai Vivek. ${st.advice}`);
+    }
+  }
+
+  document.getElementById('view-attendance').addEventListener('click', async (e) => {
+    const markBtn = e.target.closest('[data-mark]');
+    if (markBtn) {
+      await markAttendance({
+        subject: markBtn.getAttribute('data-subject'),
+        status: markBtn.getAttribute('data-mark'),
+        date: markBtn.getAttribute('data-date'),
+        startTime: markBtn.getAttribute('data-start'),
+        entryId: markBtn.getAttribute('data-entry'),
+      });
+      return;
+    }
+    const delBtn = e.target.closest('[data-del-att]');
+    if (delBtn) {
+      await window.dvsc.deleteAttendanceRecord(delBtn.getAttribute('data-del-att'));
+      loadAttendance();
+      return;
+    }
+    const restoreBtn = e.target.closest('[data-restore-att]');
+    if (restoreBtn) {
+      await window.dvsc.restoreAttendanceRecord(restoreBtn.getAttribute('data-restore-att'));
+      loadAttendance();
+      return;
+    }
+    if (e.target.closest('#att-restore-all')) {
+      await window.dvsc.restoreAllAttendance();
+      loadAttendance();
+      return;
+    }
+    if (e.target.closest('#att-clear-trash')) {
+      if (!confirm('Forget these deleted marks for good?')) return;
+      await window.dvsc.clearAttendanceTrash();
+      loadAttendance();
+      return;
+    }
+    if (e.target.closest('#att-change-from')) {
+      const current = attendanceData.trackFrom || todayKey();
+      const val = prompt('Count classes from which date? (YYYY-MM-DD)\nEverything before it stays with the portal totals.', current);
+      if (val === null) return;
+      await window.dvsc.setAttendanceTrackFrom(val.trim());
+      loadAttendance();
+      return;
+    }
+    const baseBtn = e.target.closest('[data-edit-base]');
+    if (baseBtn) {
+      const subject = baseBtn.getAttribute('data-edit-base');
+      const held = prompt(`${subject}\n\nClasses HELD as per the portal:`, baseBtn.getAttribute('data-held'));
+      if (held === null) return;
+      const attended = prompt(`${subject}\n\nClasses ATTENDED as per the portal:`, baseBtn.getAttribute('data-attended'));
+      if (attended === null) return;
+      const res = await window.dvsc.setAttendanceBaseline(subject, { held, attended });
+      if (res && res.success === false) window.dvsc.notify('Attendance', res.error);
+      loadAttendance();
+      return;
+    }
+    const ignoreBtn = e.target.closest('[data-ignore]');
+    if (ignoreBtn) {
+      await window.dvsc.toggleAttendanceIgnore(ignoreBtn.getAttribute('data-ignore'));
+      loadAttendance();
+    }
+  });
+
+  attTargetInput.addEventListener('change', async () => {
+    await window.dvsc.setAttendanceTarget(attTargetInput.value);
+    loadAttendance();
+  });
+
+  document.getElementById('att-mark-past').addEventListener('click', () => {
+    attManualForm.style.display = attManualForm.style.display === 'none' ? 'block' : 'none';
+    document.getElementById('att-m-date').value = todayKey();
+  });
+  document.getElementById('att-m-cancel').addEventListener('click', () => { attManualForm.style.display = 'none'; });
+  document.getElementById('att-m-save').addEventListener('click', async () => {
+    const subject = document.getElementById('att-m-subject').value.trim();
+    if (!subject) return window.dvsc.notify('Attendance', 'Subject is required.');
+    await markAttendance({
+      subject,
+      date: document.getElementById('att-m-date').value || todayKey(),
+      status: document.getElementById('att-m-status').value,
+    });
+    attManualForm.style.display = 'none';
+    document.getElementById('att-m-subject').value = '';
+  });
+
+  // "Did you attend?" prompt after a class ends
+  if (window.dvsc.onAttendancePrompt) {
+    window.dvsc.onAttendancePrompt((p) => {
+      loadAttendance();
+      const pct = p.stats && p.stats.pct != null ? ` (abhi ${p.stats.pct}%)` : '';
+      addMessage(`📋 Vivek, **${p.subject}** class attend ki?${pct}\nAttendance tab mein mark kar do — ✅ / ❌ / 🚫`, 'assistant');
+      speak(`Vivek, ${p.subject} class attend ki?`);
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Exams & Study Planner
+  // ─────────────────────────────────────────────────────────────
+  const examForm = document.getElementById('exam-form');
+  const examSettings = document.getElementById('exam-settings');
+  const examCards = document.getElementById('exam-cards');
+  const studyToday = document.getElementById('study-today');
+  const studyWeek = document.getElementById('study-week');
+  let editingExamId = null;
+  let examsData = null;
+
+  function examFields() {
+    return {
+      subject: document.getElementById('exam-subject'),
+      date: document.getElementById('exam-date'),
+      time: document.getElementById('exam-time'),
+      difficulty: document.getElementById('exam-difficulty'),
+      topics: document.getElementById('exam-topics'),
+    };
+  }
+
+  function resetExamForm() {
+    editingExamId = null;
+    const f = examFields();
+    f.subject.value = ''; f.date.value = ''; f.time.value = ''; f.difficulty.value = '2'; f.topics.value = '';
+    document.getElementById('exam-form-title').textContent = '📝 New Exam';
+    document.getElementById('exam-save').textContent = 'Save Exam';
+  }
+
+  function sessionRow(s, withDate) {
+    return `
+      <div class="study-row ${s.done ? 'done' : ''}">
+        <input type="checkbox" data-session="${s.id}" ${s.done ? 'checked' : ''}>
+        <div class="study-time">${withDate ? prettyDate(s.date) + ' ' : ''}${s.start}–${s.end}</div>
+        <div class="study-text">${escapeHTML(s.subject)}<small>${escapeHTML(s.topic)}</small></div>
+      </div>`;
+  }
+
+  async function loadExams() {
+    examsData = await window.dvsc.getExams();
+    const cfg = examsData.settings || {};
+    document.getElementById('study-day-start').value = cfg.dayStart || '07:00';
+    document.getElementById('study-day-end').value = cfg.dayEnd || '22:00';
+    document.getElementById('study-session-min').value = cfg.sessionMinutes || 60;
+    document.getElementById('study-max-day').value = cfg.maxSessionsPerDay || 3;
+    document.getElementById('study-reminder-time').value = cfg.reminderTime || '08:00';
+
+    examCards.innerHTML = (examsData.exams || []).map((e) => `
+      <div class="exam-card ${e.daysLeft >= 0 && e.daysLeft <= 3 ? 'soon' : ''}">
+        <h4>${escapeHTML(e.subject)}</h4>
+        <div class="exam-days">${e.daysLeft < 0 ? '—' : e.daysLeft}<small> ${e.daysLeft < 0 ? 'over' : e.daysLeft === 1 ? 'DAY LEFT' : 'DAYS LEFT'}</small></div>
+        <div class="exam-meta">${prettyDate(e.date)}${e.time ? ' · ' + e.time : ''} · ${['Easy', 'Normal', 'Hard'][e.difficulty - 1]}</div>
+        ${e.topics.length ? `<div class="exam-topics">${escapeHTML(e.topics.slice(0, 5).join(' · '))}${e.topics.length > 5 ? ` +${e.topics.length - 5}` : ''}</div>` : ''}
+        <div class="exam-progress"><span style="width:${e.progress}%"></span></div>
+        <div class="exam-meta">${e.sessionsDone}/${e.sessionsPlanned} study sessions done</div>
+        <div class="exam-card-actions">
+          <button class="att-btn" data-edit-exam="${e.id}">Edit</button>
+          <button class="att-btn absent" data-del-exam="${e.id}">Delete</button>
+        </div>
+      </div>`).join('') || '<div class="empty-hint">No exams yet. Add one and SENJU will build a study plan in your free slots.</div>';
+
+    studyToday.innerHTML = (examsData.today || []).length
+      ? examsData.today.map((s) => sessionRow(s, false)).join('')
+      : '<div class="empty-hint">Nothing planned for today.</div>';
+
+    const byDay = {};
+    for (const s of examsData.next7 || []) (byDay[s.date] = byDay[s.date] || []).push(s);
+    const days = Object.keys(byDay).sort();
+    studyWeek.innerHTML = days.length
+      ? days.map((d) => `<div class="study-day-head">${new Date(d + 'T12:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}</div>` +
+          byDay[d].map((s) => sessionRow(s, false)).join('')).join('')
+      : '<div class="empty-hint">No sessions in the next 7 days.</div>';
+  }
+
+  document.getElementById('exam-add-btn').addEventListener('click', () => {
+    resetExamForm();
+    examForm.style.display = 'block';
+  });
+  document.getElementById('exam-cancel').addEventListener('click', () => {
+    examForm.style.display = 'none';
+    resetExamForm();
+  });
+  document.getElementById('exam-settings-btn').addEventListener('click', () => {
+    examSettings.style.display = examSettings.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('exam-replan-btn').addEventListener('click', async () => {
+    await window.dvsc.regenerateStudyPlan();
+    loadExams();
+    window.dvsc.notify('SENJU', 'Study plan rebuilt.');
+  });
+  document.getElementById('study-settings-save').addEventListener('click', async () => {
+    await window.dvsc.saveStudySettings({
+      dayStart: document.getElementById('study-day-start').value || '07:00',
+      dayEnd: document.getElementById('study-day-end').value || '22:00',
+      sessionMinutes: parseInt(document.getElementById('study-session-min').value, 10) || 60,
+      maxSessionsPerDay: parseInt(document.getElementById('study-max-day').value, 10) || 3,
+      reminderTime: document.getElementById('study-reminder-time').value || '08:00',
+    });
+    examSettings.style.display = 'none';
+    loadExams();
+  });
+
+  document.getElementById('exam-save').addEventListener('click', async () => {
+    const f = examFields();
+    const payload = {
+      subject: f.subject.value.trim(),
+      date: f.date.value,
+      time: f.time.value,
+      difficulty: parseInt(f.difficulty.value, 10) || 2,
+      topics: f.topics.value.split(/[\n,;]+/).map((t) => t.trim()).filter(Boolean),
+    };
+    if (!payload.subject || !payload.date) {
+      window.dvsc.notify('Exam', 'Subject and date are required.');
+      return;
+    }
+    if (editingExamId) await window.dvsc.updateExam(editingExamId, payload);
+    else {
+      const res = await window.dvsc.addExam(payload);
+      if (res && res.success === false) return window.dvsc.notify('Exam', res.error);
+    }
+    examForm.style.display = 'none';
+    resetExamForm();
+    loadExams();
+  });
+
+  document.getElementById('view-exams').addEventListener('click', async (e) => {
+    const edit = e.target.closest('[data-edit-exam]');
+    if (edit) {
+      const ex = (examsData.exams || []).find((x) => x.id === edit.getAttribute('data-edit-exam'));
+      if (!ex) return;
+      editingExamId = ex.id;
+      const f = examFields();
+      f.subject.value = ex.subject; f.date.value = ex.date; f.time.value = ex.time || '';
+      f.difficulty.value = String(ex.difficulty); f.topics.value = (ex.topics || []).join('\n');
+      document.getElementById('exam-form-title').textContent = '✏️ Edit Exam';
+      document.getElementById('exam-save').textContent = 'Update Exam';
+      examForm.style.display = 'block';
+      examForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    const del = e.target.closest('[data-del-exam]');
+    if (del) {
+      if (!confirm('Delete this exam and its study sessions?')) return;
+      await window.dvsc.deleteExam(del.getAttribute('data-del-exam'));
+      loadExams();
+    }
+  });
+
+  document.getElementById('view-exams').addEventListener('change', async (e) => {
+    const box = e.target.closest('[data-session]');
+    if (!box) return;
+    await window.dvsc.setStudySessionDone(box.getAttribute('data-session'), box.checked);
+    loadExams();
+  });
+
+  if (window.dvsc.onStudyReminder) {
+    window.dvsc.onStudyReminder((r) => {
+      loadExams();
+      if (r.type === 'morning') {
+        const lines = (r.sessions || []).map((s) => `• ${s.start} ${s.subject} — ${s.topic}`);
+        const text = [`📚 Aaj ka study plan${r.examLine ? ` (${r.examLine})` : ''}:`, ...lines].join('\n');
+        addMessage(text, 'assistant');
+        speak(`Vivek, aaj ka study plan ready hai. ${(r.sessions || []).map((s) => `${s.start} baje ${s.subject}`).join(', ')}`);
+      } else if (r.session) {
+        addMessage(`⏳ 5 minute mein study session: **${r.session.subject}** — ${r.session.topic} (${r.session.start}–${r.session.end})`, 'assistant');
+        speak(`Vivek, 5 minute mein ${r.session.subject} padhna hai. ${r.session.topic}`);
+      }
+    });
+  }
+
+  if (window.dvsc.onAcademicsUpdated) {
+    window.dvsc.onAcademicsUpdated((what) => {
+      if (what === 'attendance') loadAttendance();
+      if (what === 'exams') loadExams();
+    });
+  }
+
+  // ===========================================================
+  // Travel - train agent
+  // ===========================================================
+  const travelEls = {
+    from: document.getElementById('travel-from'),
+    to: document.getElementById('travel-to'),
+    date: document.getElementById('travel-date'),
+    cls: document.getElementById('travel-class'),
+    sort: document.getElementById('travel-sort'),
+    status: document.getElementById('travel-status'),
+    summary: document.getElementById('travel-summary'),
+    results: document.getElementById('travel-results'),
+    sitesCard: document.getElementById('travel-sites-card'),
+    sites: document.getElementById('travel-sites'),
+    watches: document.getElementById('travel-watches'),
+    badge: document.getElementById('travel-live-badge'),
+    statusOut: document.getElementById('travel-status-out'),
+  };
+  let travelInfo = { liveData: false, sites: [] };
+  let travelLast = null;
+
+  function travelSetStatus(text, isError) {
+    if (!travelEls.status) return;
+    travelEls.status.textContent = text || '';
+    travelEls.status.style.color = isError ? 'var(--danger)' : '';
+  }
+
+  async function loadTravel() {
+    if (!travelEls.results || !window.dvsc.trainInfo) return;
+    try {
+      travelInfo = await window.dvsc.trainInfo();
+      travelEls.badge.textContent = travelInfo.liveData ? 'Live availability: on' : 'Live availability: off (add RapidAPI key in Settings)';
+      travelEls.badge.classList.toggle('on', !!travelInfo.liveData);
+      travelEls.badge.classList.toggle('off', !travelInfo.liveData);
+      if (!travelEls.date.value) { const t = new Date(Date.now() + 86400000); travelEls.date.value = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }
+      const wl = await window.dvsc.trainWatchList();
+      renderTravelWatches(wl.success ? wl.data : []);
+      if (!travelLast) {
+        const last = await window.dvsc.trainLastSearch();
+        if (last) renderTravelSearch(last);
+      }
+    } catch (e) {
+      console.error('loadTravel failed', e);
+    }
+  }
+
+  function trainAvailHtml(a) {
+    if (!a) return '';
+    const p = a.probability != null ? ` · ${a.probability}% confirm` : '';
+    return `<div class="avail ${a.status || 'unknown'}">${escapeHTML(a.text || 'unknown')}${p}</div>`;
+  }
+
+  function renderTravelSearch(r) {
+    travelLast = r;
+    if (!r) return;
+    travelEls.from.value = r.from.code;
+    travelEls.to.value = r.to.code;
+    travelEls.date.value = r.date;
+    if (r.cls) travelEls.cls.value = r.cls;
+
+    const classAvgTxt = Object.entries(r.classAvg || {}).map(([c, v]) => `${c} ₹${v.avg}`).join(' · ');
+    travelEls.summary.style.display = 'grid';
+    travelEls.summary.innerHTML = `
+      <div class="travel-stat"><div class="k">Trains</div><div class="v">${r.count}</div><div class="s">${escapeHTML(r.from.name)} → ${escapeHTML(r.to.name)} · ${prettyDate(r.date)}</div></div>
+      <div class="travel-stat"><div class="k">Cheapest${r.cls ? ' ' + r.cls : ''}</div><div class="v">${r.cheapest ? '₹' + r.cheapest.fare : '—'}</div><div class="s">${r.cheapest ? escapeHTML(r.cheapest.no + ' ' + r.cheapest.name) : ''}</div></div>
+      <div class="travel-stat"><div class="k">Fastest</div><div class="v">${r.fastest ? escapeHTML(r.fastest.duration) : '—'}</div><div class="s">${r.fastest ? escapeHTML(r.fastest.no + ' ' + r.fastest.name) : ''}</div></div>
+      <div class="travel-stat"><div class="k">Average fare</div><div class="v">${r.avgFare ? '₹' + r.avgFare : '—'}</div><div class="s">${r.cls ? 'for ' + r.cls : escapeHTML(classAvgTxt)}</div></div>`;
+
+    if (!r.count) {
+      travelEls.results.innerHTML = `<div class="empty-hint">No direct trains on ${prettyDate(r.date)}${r.cls ? ' with ' + r.cls : ''}. ${r.totalOnRoute ? r.totalOnRoute + ' trains run on this route on other days.' : 'Try a nearby junction.'}</div>`;
+      travelEls.sitesCard.style.display = 'none';
+      return;
+    }
+
+    const siteButtons = (t) => (travelInfo.sites || []).map((s) => `<button data-book="${s.id}" data-train="${t.no}">${escapeHTML(s.name)}</button>`).join('');
+    travelEls.results.innerHTML = r.trains.map((t) => {
+      const fares = Object.entries(t.fares).sort((a, b) => a[1] - b[1])
+        .map(([c, v]) => `<span class="fare-chip ${r.cls === c ? 'sel' : ''}" title="${escapeHTML(c)}">${c} ₹${v}</span>`).join('');
+      const tags = (t.tags || []).map((x) => `<span class="tag-chip ${x}">${x}</span>`).join('');
+      const vs = t.vsAvgPct != null && r.cls ? `<div class="t-sub">${t.vsAvgPct > 0 ? '+' : ''}${t.vsAvgPct}% vs average</div>` : '';
+      const canWatch = !!r.cls;
+      return `
+        <div class="train-card ${t.tags && t.tags.includes('cheapest') ? 'best' : ''}" data-no="${t.no}">
+          <div>
+            <div class="t-name">${t.no} ${escapeHTML(t.name)}${tags}</div>
+            <div class="t-sub">${escapeHTML(t.type || '')} · ${t.distanceKm || '?'} km · runs ${escapeHTML((t.runsOn || []).join(' '))}</div>
+            ${vs}
+          </div>
+          <div>
+            <div class="t-time">${t.dep} → ${t.arr}${t.arrDayOffset ? `<small> +${t.arrDayOffset}d</small>` : ''}</div>
+            <div class="t-dur">${escapeHTML(t.duration)}</div>
+            ${trainAvailHtml(t.availability)}
+          </div>
+          <div class="t-fares">${fares || '<span class="empty-hint">fare n/a</span>'}</div>
+          <div class="t-actions">
+            ${travelInfo.liveData && r.cls ? `<button class="att-btn" data-avail="${t.no}">Check seats</button>` : ''}
+            ${canWatch ? `<button class="att-btn present" data-watch="${t.no}" data-name="${escapeHTML(t.name)}" ${travelInfo.liveData ? '' : 'title="Needs RapidAPI key"'}>Watch seat</button>` : ''}
+            <span class="book-menu"><button class="att-btn" data-book-menu="${t.no}">Book ▾</button><span class="book-list">${siteButtons(t)}</span></span>
+          </div>
+        </div>`;
+    }).join('');
+
+    if (r.sites) {
+      travelEls.sitesCard.style.display = 'block';
+      travelEls.sites.innerHTML = `<div class="empty-hint">Base fare ₹${r.sites.fare} (cheapest option). ${escapeHTML(r.sites.note)}</div>` +
+        r.sites.rows.map((s, i) => `
+          <div class="site-row ${i === 0 ? 'best' : ''}">
+            <div><b>${escapeHTML(s.name)}</b>${s.note ? `<div class="empty-hint">${escapeHTML(s.note)}</div>` : ''}</div>
+            <div>fee ₹${s.fee}</div>
+            <div>payment ₹${s.pg}</div>
+            <div class="total">₹${s.total}${s.extra ? `<small> (+₹${s.extra})</small>` : ''}</div>
+            <div><button class="att-btn" data-book="${s.id}">Open</button></div>
+          </div>`).join('');
+    } else {
+      travelEls.sitesCard.style.display = 'none';
+    }
+  }
+
+  function renderTravelWatches(list) {
+    const active = (list || []).filter((w) => w.active);
+    const done = (list || []).filter((w) => !w.active);
+    if (!active.length && !done.length) {
+      travelEls.watches.innerHTML = '<div class="empty-hint">No watches yet. Search a train with a class and click “Watch seat” on a waitlisted option.</div>';
+      return;
+    }
+    const row = (w) => `
+      <div class="watch-row">
+        <div>
+          <b>${w.trainNo} ${escapeHTML(w.trainName || '')}</b> ${w.from} → ${w.to} · ${prettyDate(w.date)} · ${w.cls}
+          <div class="avail ${w.lastStatus || 'unknown'}">${escapeHTML(w.lastText || 'not checked yet')}${w.probability != null ? ` · ${w.probability}% confirm` : ''}${w.lastCheckedAt ? ` · checked ${new Date(w.lastCheckedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : ''}${w.active ? '' : ' · ended'}</div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button class="att-btn" data-book="irctc" data-wfrom="${w.from}" data-wto="${w.to}" data-wdate="${w.date}" data-wcls="${w.cls}">Book</button>
+          <button class="att-btn absent" data-unwatch="${w.id}">Remove</button>
+        </div>
+      </div>`;
+    travelEls.watches.innerHTML = active.map(row).join('') + done.slice(0, 3).map(row).join('');
+  }
+
+  async function travelDoSearch() {
+    const q = {
+      from: travelEls.from.value.trim(),
+      to: travelEls.to.value.trim(),
+      date: travelEls.date.value,
+      cls: travelEls.cls.value || undefined,
+      sort: travelEls.sort.value || undefined,
+    };
+    if (!q.from || !q.to || !q.date) return travelSetStatus('From, To aur Date bharo.', true);
+    travelSetStatus('Searching…');
+    const res = await window.dvsc.trainSearch(q);
+    if (!res.success) return travelSetStatus(res.error, true);
+    travelSetStatus(`${res.data.count} trains found${res.data.liveData && q.cls ? ' · live seats checked for top 6' : ''}`);
+    renderTravelSearch(res.data);
+  }
+
+  if (travelEls.results) {
+    document.getElementById('travel-search-btn').addEventListener('click', travelDoSearch);
+    [travelEls.from, travelEls.to].forEach((el) => el.addEventListener('keydown', (e) => {
+      const sug = document.getElementById(el.id + '-suggest');
+      if (e.key === 'Enter' && !(sug && sug.classList.contains('open'))) travelDoSearch();
+    }));
+    document.getElementById('travel-swap-btn').addEventListener('click', () => {
+      const a = travelEls.from.value; travelEls.from.value = travelEls.to.value; travelEls.to.value = a;
+    });
+    document.getElementById('travel-check-watches').addEventListener('click', async () => {
+      travelSetStatus('Checking watches…');
+      const res = await window.dvsc.trainWatchCheck();
+      if (res.success) { renderTravelWatches(res.data); travelSetStatus('Watches updated.'); }
+      else travelSetStatus(res.error, true);
+    });
+
+    // Station suggestions - custom dropdown (no native <datalist>: its popup can hang frameless windows)
+    const stationBox = (input) => {
+      const box = document.getElementById(input.id + '-suggest');
+      let timer = null;
+      let items = [];
+      let active = -1;
+      const hide = () => { box.classList.remove('open'); box.innerHTML = ''; items = []; active = -1; };
+      const pick = (s) => { input.value = s.code; input.title = s.name; hide(); };
+      const render = () => {
+        if (!items.length) return hide();
+        box.innerHTML = items.map((s, i) => `<button type="button" class="${i === active ? 'active' : ''}" data-i="${i}">${escapeHTML(s.name)}<small>${s.code}</small></button>`).join('');
+        box.classList.add('open');
+      };
+      input.addEventListener('input', () => {
+        clearTimeout(timer);
+        const q = input.value.trim();
+        if (q.length < 2) return hide();
+        timer = setTimeout(async () => {
+          try {
+            const list = await window.dvsc.trainStations(q);
+            if (input.value.trim() !== q) return; // stale
+            items = (list || []).slice(0, 8);
+            active = -1;
+            render();
+          } catch (_) { hide(); }
+        }, 120);
+      });
+      input.addEventListener('keydown', (e) => {
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); active = (active + 1) % items.length; render(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); active = (active - 1 + items.length) % items.length; render(); }
+        else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); pick(items[active >= 0 ? active : 0]); }
+        else if (e.key === 'Escape') hide();
+      });
+      input.addEventListener('blur', () => setTimeout(hide, 150));
+      box.addEventListener('mousedown', (e) => {
+        const b = e.target.closest('button[data-i]');
+        if (!b) return;
+        e.preventDefault();
+        pick(items[parseInt(b.getAttribute('data-i'), 10)]);
+      });
+    };
+    stationBox(travelEls.from);
+    stationBox(travelEls.to);
+
+    document.getElementById('travel-pnr-btn').addEventListener('click', async () => {
+      const pnr = document.getElementById('travel-pnr').value.trim();
+      travelEls.statusOut.textContent = 'Checking PNR… (10–20 seconds, hidden browser se live page padh rahi hu)';
+      const res = await window.dvsc.trainPnr(pnr);
+      if (!res.success) return (travelEls.statusOut.textContent = res.error);
+      const p = res.data;
+      if (p.invalid) return (travelEls.statusOut.textContent = `PNR ${p.pnr}: ${p.raw}`);
+      const head = [p.train, p.from && p.to ? `${p.from} → ${p.to}` : '', p.date, p.cls, p.quota].filter(Boolean).join(' · ');
+      const chart = p.chartPrepared == null ? '' : `\nChart: ${p.chartPrepared === true || /prepared|yes/i.test(String(p.chartPrepared)) ? 'prepared' : 'not prepared'}`;
+      travelEls.statusOut.textContent = `PNR ${p.pnr}${head ? ' · ' + head : ''}\n` +
+        (p.passengers.map((x) => `Passenger ${x.no}: ${x.current || x.booking}${x.booking && x.current && x.booking !== x.current ? ` (booked ${x.booking})` : ''}${x.coach ? ` · ${x.coach}${x.berth ? '/' + x.berth : ''}` : ''}${x.confirmChance ? ` · confirm chance ${x.confirmChance}` : ''}`).join('\n') || p.raw || 'No passenger rows found.') +
+        chart + (p.note ? `\n${p.note}` : '') + `\nSource: ${p.source}`;
+    });
+    document.getElementById('travel-live-btn').addEventListener('click', async () => {
+      const no = document.getElementById('travel-live-no').value.trim();
+      travelEls.statusOut.textContent = 'Fetching running status… (10–20 seconds)';
+      const res = await window.dvsc.trainLive(no, 0);
+      if (!res.success) return (travelEls.statusOut.textContent = res.error);
+      const s = res.data;
+      if (!s.status && !s.currentStation && s.raw) return (travelEls.statusOut.textContent = `${s.trainNo} (${s.source})\n${s.raw}`);
+      travelEls.statusOut.textContent = `${s.trainNo} ${s.trainName}${s.startDate ? ` · started ${s.startDate}` : ''}\n${s.status || 'status unknown'}${s.currentStation ? ` · at ${s.currentStation}` : ''}${s.delayMin != null ? ` · delay ${s.delayMin} min` : ''}` +
+        (s.nextStation ? `\nNext: ${s.nextStation}${s.eta ? ` · ETA ${s.eta}` : ''}${s.platform ? ` · PF ${s.platform}` : ''}` : '') +
+        (s.upcoming.length ? `\nUpcoming: ${s.upcoming.map((u) => `${u.name}${u.eta ? ' ' + u.eta : ''}${u.delay ? ` (${u.delay})` : ''}`).join(', ')}` : '') +
+        (s.note ? `\n${s.note}` : '') + (s.lastUpdated ? `\nUpdated ${s.lastUpdated}` : '') + `\nSource: ${s.source}`;
+    });
+
+    document.getElementById('view-travel').addEventListener('click', async (e) => {
+      const menuBtn = e.target.closest('[data-book-menu]');
+      document.querySelectorAll('.book-menu.open').forEach((m) => { if (!m.contains(e.target)) m.classList.remove('open'); });
+      if (menuBtn) { menuBtn.parentElement.classList.toggle('open'); return; }
+
+      const book = e.target.closest('[data-book]');
+      if (book) {
+        const q = travelLast
+          ? { from: travelLast.from.code, to: travelLast.to.code, date: travelLast.date, cls: travelLast.cls }
+          : { from: travelEls.from.value, to: travelEls.to.value, date: travelEls.date.value, cls: travelEls.cls.value };
+        if (book.dataset.wfrom) Object.assign(q, { from: book.dataset.wfrom, to: book.dataset.wto, date: book.dataset.wdate, cls: book.dataset.wcls });
+        q.site = book.getAttribute('data-book');
+        const res = await window.dvsc.trainOpenBooking(q);
+        travelSetStatus(res.success ? `Opened ${res.data.site}${res.data.prefill ? ' with your search pre-filled' : ' — enter stations & date there'}. Login/OTP/payment aap khud karo.` : res.error, !res.success);
+        return;
+      }
+
+      const avail = e.target.closest('[data-avail]');
+      if (avail && travelLast) {
+        const no = avail.getAttribute('data-avail');
+        avail.textContent = '…';
+        const res = await window.dvsc.trainAvailability({ trainNo: no, from: travelLast.from.code, to: travelLast.to.code, date: travelLast.date, cls: travelLast.cls });
+        avail.textContent = 'Check seats';
+        const t = travelLast.trains.find((x) => x.no === no);
+        if (t) { t.availability = res.success ? res.data : { status: 'unknown', text: res.error }; renderTravelSearch(travelLast); }
+        return;
+      }
+
+      const watch = e.target.closest('[data-watch]');
+      if (watch && travelLast) {
+        const res = await window.dvsc.trainWatchAdd({ trainNo: watch.getAttribute('data-watch'), trainName: watch.getAttribute('data-name'), from: travelLast.from.code, to: travelLast.to.code, date: travelLast.date, cls: travelLast.cls });
+        if (!res.success) return travelSetStatus(res.error, true);
+        travelSetStatus('Watching — alert aayega jab seat khulegi.');
+        const wl = await window.dvsc.trainWatchList();
+        if (wl.success) renderTravelWatches(wl.data);
+        return;
+      }
+
+      const un = e.target.closest('[data-unwatch]');
+      if (un) {
+        await window.dvsc.trainWatchRemove(un.getAttribute('data-unwatch'));
+        const wl = await window.dvsc.trainWatchList();
+        if (wl.success) renderTravelWatches(wl.data);
+      }
+    });
+
+    if (window.dvsc.onTrainSearchResult) window.dvsc.onTrainSearchResult((r) => renderTravelSearch(r));
+    if (window.dvsc.onTrainWatchesUpdated) window.dvsc.onTrainWatchesUpdated((list) => renderTravelWatches(list));
+    // Booking agent progress → chat + voice (login / handoff moments matter)
+    if (window.dvsc.onBookingStatus) {
+      let lastSpoken = '';
+      window.dvsc.onBookingStatus((st) => {
+        if (!st || !st.state) return;
+        if (['need_user', 'handoff', 'error', 'cancelled'].includes(st.state) && st.message !== lastSpoken) {
+          lastSpoken = st.message;
+          addMessage(`🤖 Booking agent: ${st.message}`, 'assistant');
+          speak(st.state === 'handoff' ? 'Vivek, booking review page ready hai. Captcha bhar ke payment kar lo.' : st.state === 'need_user' ? 'Vivek, IRCTC login chahiye, Chrome window dekho.' : `Booking agent: ${st.message}`);
+        }
+      });
+    }
+
+    if (window.dvsc.onTrainAlert) {
+      window.dvsc.onTrainAlert((a) => {
+        addMessage(`${a.title} ${a.body}`, 'assistant');
+        speak(`Vivek, ${a.watch.trainNo} mein ${a.availability.status === 'rac' ? 'RAC' : 'seat'} available ho gayi hai, ${a.watch.date} ke liye. Jaldi book kar lo.`);
+      });
+    }
+  }
+
   const waQrImg = document.getElementById('whatsapp-qr-img');
   const waStatus = document.getElementById('whatsapp-status-text');
   const waLoader = document.getElementById('whatsapp-loader');
   const waActions = document.getElementById('wa-actions');
   const waLogoutBtn = document.getElementById('whatsapp-logout-btn');
+  const waReconnectBtn = document.getElementById('whatsapp-reconnect-btn');
+  const waResetBtn = document.getElementById('whatsapp-reset-btn');
+  const waProgress = document.getElementById('wa-progress');
+  const waProgressBar = document.getElementById('wa-progress-bar');
+  let waLast = { state: 'starting', message: 'Starting WhatsApp...' };
+  let waStuckTimer = null;
 
-  // Check state on load
-  async function updateWhatsAppStateUI() {
-    if (!navigator.onLine) {
-      waLoader.style.display = 'none';
-      waQrImg.style.display = 'none';
-      waStatus.textContent = 'âš ï¸ Switch to internet to use WhatsApp';
+  function renderWhatsApp(st) {
+    if (st) waLast = st;
+    const s = waLast.rawState || waLast.state;
+    const show = (el, on, display = 'block') => { if (el) el.style.display = on ? display : 'none'; };
+
+    if (!navigator.onLine && s !== 'ready') {
+      show(waLoader, false); show(waQrImg, false); show(waProgress, false);
+      show(waActions, false); show(waReconnectBtn, false); show(waResetBtn, false);
+      waStatus.textContent = '⚠️ No internet — WhatsApp will reconnect automatically when you are back online';
       waStatus.style.color = 'var(--danger, #ff4444)';
-      waActions.style.display = 'none';
       return;
     }
 
-    const data = await window.dvsc.getWhatsAppState();
-    const state = typeof data === 'string' ? data : data.state;
-    const qr = typeof data === 'string' ? null : data.qr;
-    
-    if (state === 'connected') {
-      waLoader.style.display = 'none';
-      waQrImg.style.display = 'none';
-      waStatus.textContent = 'WhatsApp Linked Successfully! âœ…';
-      waStatus.style.color = 'var(--success, #00ff88)';
-      waActions.style.display = 'block';
-    } else if (state === 'waiting' || state === 'disconnected') {
-      if (qr) {
-        waLoader.style.display = 'none';
-        waQrImg.src = qr;
-        waQrImg.style.display = 'inline-block';
-        waStatus.textContent = 'Scan QR code to link WhatsApp';
-        waStatus.style.color = 'var(--accent-secondary)';
-        waActions.style.display = 'none';
-      } else {
-        waLoader.style.display = 'block';
-        waQrImg.style.display = 'none';
-        waStatus.textContent = 'Waiting for QR...';
-        waStatus.style.color = 'var(--text-muted)';
-        waActions.style.display = 'none';
-      }
+    const isReady = s === 'ready' || s === 'connected';
+    const isQR = s === 'qr' && waLast.qr;
+    const isBusy = ['idle', 'starting', 'authenticated', 'loading', 'disconnected', 'offline'].includes(s);
+    const isError = s === 'error';
+
+    show(waQrImg, isQR, 'inline-block');
+    if (isQR) waQrImg.src = waLast.qr;
+    show(waLoader, isBusy);
+    show(waProgress, s === 'loading');
+    if (s === 'loading') waProgressBar.style.width = (waLast.percent || 0) + '%';
+    show(waActions, isReady);
+    show(waReconnectBtn, isError || s === 'disconnected');
+    show(waResetBtn, isError || isQR || s === 'loading' || s === 'authenticated', 'inline-block');
+
+    let text = waLast.message || s;
+    if (s === 'loading' && waLast.percent) text = `Loading chats... ${waLast.percent}%`;
+    if (isReady) text = `✅ ${waLast.message || 'WhatsApp connected'}`;
+    waStatus.textContent = text;
+    waStatus.style.color = isReady ? 'var(--success, #00ff88)'
+      : isError ? 'var(--danger, #ff4444)'
+      : isQR ? 'var(--accent-secondary)' : 'var(--text-muted)';
+
+    // If something looks stuck for 45s, offer the Reconnect button
+    clearTimeout(waStuckTimer);
+    if (isBusy) {
+      waStuckTimer = setTimeout(() => show(waReconnectBtn, true, 'inline-block'), 45000);
+    }
+  }
+
+  async function updateWhatsAppStateUI() {
+    try {
+      renderWhatsApp(await window.dvsc.getWhatsAppState());
+    } catch (e) {
+      renderWhatsApp({ state: 'error', message: 'WhatsApp module not loaded — restart SENJU.' });
     }
   }
 
   updateWhatsAppStateUI();
-  window.addEventListener('online', updateWhatsAppStateUI);
-  window.addEventListener('offline', updateWhatsAppStateUI);
+  // SENJU's main process waits for internet and reconnects by itself — just refresh the view
+  window.addEventListener('online', () => renderWhatsApp());
+  window.addEventListener('offline', () => renderWhatsApp());
+
+  if (window.dvsc.onWhatsAppStatus) {
+    window.dvsc.onWhatsAppStatus((st) => renderWhatsApp(st));
+  } else {
+    // Older preload: fall back to legacy events
+    window.dvsc.onWhatsAppQR((qr) => renderWhatsApp({ state: 'qr', qr, message: 'Scan the QR code with WhatsApp on your phone' }));
+    window.dvsc.onWhatsAppReady(() => renderWhatsApp({ state: 'ready', message: 'WhatsApp connected' }));
+    window.dvsc.onWhatsAppDisconnected(() => renderWhatsApp({ state: 'disconnected', message: 'Reconnecting...' }));
+  }
+
+  waReconnectBtn.addEventListener('click', async () => {
+    renderWhatsApp({ state: 'starting', message: 'Reconnecting...' });
+    await window.dvsc.reconnectWhatsApp();
+  });
+
+  waResetBtn.addEventListener('click', async () => {
+    if (!confirm('Remove the saved WhatsApp login and show a new QR code?')) return;
+    renderWhatsApp({ state: 'starting', message: 'Clearing old login...' });
+    await window.dvsc.resetWhatsAppSession();
+  });
 
   waLogoutBtn.addEventListener('click', async () => {
-    waActions.style.display = 'none';
-    waLoader.style.display = 'block';
-    waStatus.textContent = 'Logging out...';
-    waStatus.style.color = 'var(--text-muted)';
+    if (!confirm('Log out WhatsApp from SENJU?')) return;
+    renderWhatsApp({ state: 'starting', message: 'Logging out...' });
     await window.dvsc.logoutWhatsApp();
-  });
-
-  window.dvsc.onWhatsAppQR((qrDataUrl) => {
-    waLoader.style.display = 'none';
-    waQrImg.src = qrDataUrl;
-    waQrImg.style.display = 'inline-block';
-    waStatus.textContent = 'Scan QR code to link WhatsApp';
-    waStatus.style.color = 'var(--accent-secondary)';
-    waActions.style.display = 'none';
-  });
-
-  window.dvsc.onWhatsAppReady(() => {
-    waLoader.style.display = 'none';
-    waQrImg.style.display = 'none';
-    waStatus.textContent = 'WhatsApp Linked Successfully! âœ…';
-    waStatus.style.color = 'var(--success, #00ff88)';
-    waActions.style.display = 'block';
-  });
-
-  window.dvsc.onWhatsAppDisconnected(() => {
-    waLoader.style.display = 'block';
-    waQrImg.style.display = 'none';
-    waStatus.textContent = 'WhatsApp disconnected. Waiting to reconnect...';
-    waStatus.style.color = 'var(--danger, #ff4444)';
-    waActions.style.display = 'none';
   });
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1331,254 +2060,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { passive: false });
   }
 
-  // -- 3D Rotation helpers --
-  function rotY(x, y, z, a) {
-    return { x: x*Math.cos(a) + z*Math.sin(a), y: y, z: -x*Math.sin(a) + z*Math.cos(a) };
-  }
-  function rotX(x, y, z, a) {
-    return { x: x, y: y*Math.cos(a) - z*Math.sin(a), z: y*Math.sin(a) + z*Math.cos(a) };
-  }
-  function rotZ(x, y, z, a) {
-    return { x: x*Math.cos(a) - y*Math.sin(a), y: x*Math.sin(a) + y*Math.cos(a), z: z };
-  }
-
-  // -- File/folder labels for nodes --
-  var FILE_LABELS = [
-    'main.js', 'renderer.js', 'index.html', 'package.json', 'styles/', 'modules/',
-    'preload.js', 'gemini.js', 'reminders.js', 'timetable.js', 'node_modules/',
-    'main.css', 'jarvis.css', '.env', 'config.json', 'assets/', 'fonts/',
-    'app.log', 'build/', 'dist/', 'src/', 'utils.js', 'api.js', 'auth.js',
-    'database.db', 'cache/', 'temp/', 'README.md', 'LICENSE', '.gitignore',
-    'tsconfig.json', 'webpack.config.js', 'babel.config.js', 'jest.config.js',
-    'routes/', 'middleware/', 'controllers/', 'models/', 'views/', 'public/',
-    'images/', 'icons/', 'sounds/', 'data.json', 'schema.sql', 'migrate.js',
-    'test/', 'spec/', 'hooks/', 'context/', 'store.js', 'actions.js',
-    'reducer.js', 'types.ts', 'interface.ts', 'enum.ts', 'constants.js',
-    'helpers.js', 'validators.js', 'formatters.js', 'logger.js', 'server.js',
-    'client.js', 'socket.js', 'events.js', 'worker.js', 'service.js',
-    'handler.js', 'parser.js', 'compiler.js', 'loader.js', 'plugin.js',
-    'theme.css', 'layout.css', 'components/', 'pages/', 'lib/', 'vendor/',
-    'scripts/', 'docs/', 'examples/', 'templates/', 'i18n/', 'locales/',
-    'deploy.sh', 'Dockerfile', 'docker-compose.yml', 'nginx.conf', 'Makefile',
-    'Procfile', '.env.local', '.env.prod', 'secrets.json', 'keys/',
-    'certificates/', 'backup/', 'logs/', 'analytics.js', 'monitor.js',
-    'report.js', 'dashboard.js', 'profile.js', 'settings.js', 'account.js',
-    'payment.js', 'checkout.js', 'cart.js', 'product.js', 'search.js',
-    'filter.js', 'sort.js', 'pagination.js', 'infinite-scroll.js', 'modal.js',
-    'tooltip.js', 'dropdown.js', 'sidebar.js', 'navbar.js', 'footer.js',
-    'header.js', 'hero.js', 'card.js', 'list.js', 'table.js', 'form.js',
-    'input.js', 'button.js', 'icon.js', 'avatar.js', 'badge.js', 'alert.js',
-    'toast.js', 'spinner.js', 'skeleton.js', 'progress.js', 'slider.js',
-    'switch.js', 'radio.js', 'checkbox.js', 'select.js', 'textarea.js',
-    'upload.js', 'download.js', 'clipboard.js', 'share.js', 'print.js',
-    'export.js', 'import.js', 'sync.js', 'offline.js', 'pwa.js',
-    'manifest.json', 'sw.js', 'register.js', 'login.js', 'logout.js',
-    'forgot.js', 'reset.js', 'verify.js', 'confirm.js', 'welcome.js',
-    'onboard.js', 'tutorial.js', 'help.js', 'faq.js', 'contact.js',
-    'about.js', 'terms.js', 'privacy.js', 'cookies.js', 'error.js',
-    '404.html', '500.html', 'robots.txt', 'sitemap.xml', 'humans.txt',
-    'changelog.md', 'contributing.md', 'security.md', 'code_of_conduct.md',
-    'pull_request.md', 'issue_template.md', 'bug_report.md', 'feature.md'
-  ];
-
-  // -- Generate sphere with Fibonacci distribution --
-  var NODE_COUNT = 200;
-  function makeSphereNodes(count, radius) {
-    var nodes = [];
-    for (var i = 0; i < count; i++) {
-      var theta = Math.acos(1 - 2 * (i + 0.5) / count);
-      var phi = Math.PI * (1 + Math.sqrt(5)) * i;
-      nodes.push({
-        ox: Math.sin(theta) * Math.cos(phi),
-        oy: Math.cos(theta),
-        oz: Math.sin(theta) * Math.sin(phi),
-        r: radius,
-        pulse: Math.random() * Math.PI * 2,
-        speed: 0.003 + Math.random() * 0.012,
-        label: FILE_LABELS[i % FILE_LABELS.length],
-      });
-    }
-    return nodes;
-  }
-
-  var sphereNodes = [];
-  var sphereEdges = [];
-  var SPHERE_R = 0;
-
-  function buildEdges(nodes, maxDist) {
-    var edges = [];
-    var MD = maxDist || 0.48;
-    for (var i = 0; i < nodes.length; i++) {
-      for (var j = i + 1; j < nodes.length; j++) {
-        var dx = nodes[i].ox - nodes[j].ox;
-        var dy = nodes[i].oy - nodes[j].oy;
-        var dz = nodes[i].oz - nodes[j].oz;
-        var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-        if (dist < MD) edges.push([i, j, dist]);
-      }
-    }
-    return edges;
-  }
-
-  // Inner core nodes (smaller sphere inside)
-  var coreNodes = [];
-  var coreEdges = [];
-
-  // Orbiting ring particles
-  var RING_PARTICLES = 120;
-  var ringParticles = [];
-
-  function initRingParticles() {
-    ringParticles = [];
-    for (var i = 0; i < RING_PARTICLES; i++) {
-      var angle = (i / RING_PARTICLES) * Math.PI * 2;
-      ringParticles.push({
-        angle: angle,
-        radius: SPHERE_R * (1.15 + Math.random() * 0.15),
-        speed: 0.002 + Math.random() * 0.004,
-        size: 0.5 + Math.random() * 1.5,
-        alpha: 0.2 + Math.random() * 0.5,
-        tilt: (Math.random() - 0.5) * 0.3,
-      });
-    }
-  }
-
-  // Floating dust particles in background
-  var DUST_COUNT = 80;
-  var DUST = [];
-  for (var di = 0; di < DUST_COUNT; di++) {
-    DUST.push({
-      x: Math.random(), y: Math.random(),
-      vx: (Math.random()-0.5)*0.0004,
-      vy: (Math.random()-0.5)*0.0004,
-      r: Math.random()*1.8+0.3,
-      alpha: Math.random()*0.35+0.05,
-      hue: Math.random() > 0.5 ? 330 : 280,
-    });
-  }
-
-  // -- SOLAR SYSTEM: Planet Definitions --
-  var PLANET_DATA = [
-    {
-      name: 'MERCURY', orbitMul: 1.35, sizeMul: 0.08, speed: 0.012, hue: 40, nodeCount: 15,
-      files: ['.env', 'config.json', '.gitignore', 'tsconfig.json', 'package.json', '.env.local', '.env.prod', 'babel.config.js', 'jest.config.js', 'manifest.json', 'robots.txt', 'sitemap.xml', 'humans.txt', '.editorconfig', 'prettier.config.js']
-    },
-    {
-      name: 'VENUS', orbitMul: 1.55, sizeMul: 0.10, speed: 0.009, hue: 50, nodeCount: 18,
-      files: ['main.css', 'theme.css', 'layout.css', 'jarvis.css', 'variables.css', 'reset.css', 'animations.css', 'responsive.css', 'components.css', 'utilities.css', 'typography.css', 'grid.css', 'forms.css', 'buttons.css', 'cards.css', 'modal.css', 'tooltip.css', 'sidebar.css']
-    },
-    {
-      name: 'EARTH', orbitMul: 1.8, sizeMul: 0.12, speed: 0.007, hue: 200, nodeCount: 22,
-      files: ['index.html', 'main.js', 'renderer.js', 'app.js', 'server.js', 'client.js', 'router.js', 'store.js', 'actions.js', 'reducer.js', 'context.js', 'hooks.js', 'utils.js', 'helpers.js', 'constants.js', 'types.ts', 'interface.ts', 'enum.ts', 'validators.js', 'formatters.js', 'logger.js', 'events.js']
-    },
-    {
-      name: 'MARS', orbitMul: 2.05, sizeMul: 0.09, speed: 0.006, hue: 10, nodeCount: 16,
-      files: ['Dockerfile', 'docker-compose.yml', 'deploy.sh', 'Makefile', 'Procfile', 'nginx.conf', 'webpack.config.js', 'rollup.config.js', 'vite.config.js', 'build.sh', 'ci.yml', 'cd.yml', 'start.sh', 'setup.sh', 'install.sh', 'migrate.js']
-    },
-    {
-      name: 'JUPITER', orbitMul: 2.45, sizeMul: 0.18, speed: 0.004, hue: 30, nodeCount: 28,
-      files: ['node_modules/', 'vendor/', 'lib/', 'src/', 'dist/', 'build/', 'public/', 'assets/', 'static/', 'media/', 'uploads/', 'downloads/', 'cache/', 'temp/', 'backup/', 'logs/', 'scripts/', 'tools/', 'plugins/', 'extensions/', 'packages/', 'modules/', 'components/', 'pages/', 'views/', 'layouts/', 'templates/', 'services/']
-    },
-    {
-      name: 'SATURN', orbitMul: 2.85, sizeMul: 0.15, speed: 0.003, hue: 45, nodeCount: 22,
-      files: ['sidebar.js', 'navbar.js', 'header.js', 'footer.js', 'hero.js', 'card.js', 'list.js', 'table.js', 'form.js', 'input.js', 'button.js', 'icon.js', 'avatar.js', 'badge.js', 'alert.js', 'toast.js', 'spinner.js', 'skeleton.js', 'progress.js', 'slider.js', 'switch.js', 'carousel.js']
-    },
-    {
-      name: 'URANUS', orbitMul: 3.25, sizeMul: 0.11, speed: 0.002, hue: 175, nodeCount: 18,
-      files: ['test/', 'spec/', 'README.md', 'LICENSE', 'CHANGELOG.md', 'CONTRIBUTING.md', 'docs/', 'examples/', 'tutorials/', 'guides/', 'api-docs/', 'wiki/', 'faq.md', 'help.md', 'about.md', 'security.md', 'code_of_conduct.md', 'architecture.md']
-    },
-    {
-      name: 'NEPTUNE', orbitMul: 3.6, sizeMul: 0.10, speed: 0.0015, hue: 220, nodeCount: 16,
-      files: ['database.db', 'data.json', 'schema.sql', 'seeds/', 'fixtures/', 'migrations/', 'models/', 'repositories/', 'queries/', 'mutations/', 'resolvers/', 'subscriptions/', 'graphql/', 'rest/', 'api/', 'endpoints/']
-    },
-  ];
-
-  var planets = [];
-
-  function initPlanets() {
-    planets = [];
-    PLANET_DATA.forEach(function(pd, idx) {
-      var orbitRadius = SPHERE_R * pd.orbitMul;
-      var planetRadius = SPHERE_R * pd.sizeMul;
-      var pNodes = makeSphereNodes(pd.nodeCount, planetRadius);
-      pNodes.forEach(function(n, i) { n.label = pd.files[i % pd.files.length]; });
-      var pEdges = buildEdges(pNodes, 0.6);
-      planets.push({
-        name: pd.name,
-        orbitRadius: orbitRadius,
-        planetRadius: planetRadius,
-        speed: pd.speed,
-        hue: pd.hue,
-        angle: (idx / PLANET_DATA.length) * Math.PI * 2, // FIXED position angle
-        nodes: pNodes,
-        edges: pEdges,
-        tilt: 0.18 + idx * 0.02,
-        rotAngle: 0,
-        fileLabels: pd.files, // Store original file list
-        screenX: 0, screenY: 0, // For click detection
-      });
-    });
-  }
-
-  // -- Focus on a planet (click to enter) --
-  function focusOnPlanet(idx) {
-    var planet = planets[idx];
-    focusedPlanet = planet;
-    showPlanets = false;
-
-    // Backup original SUN labels
-    if (!originalFileLabels) {
-      originalFileLabels = sphereNodes.map(function(n) { return n.label; });
-    }
-
-    // Rebuild main sphere with planet's file labels
-    sphereNodes = makeSphereNodes(NODE_COUNT, SPHERE_R);
-    sphereNodes.forEach(function(n, i) {
-      n.label = planet.fileLabels[i % planet.fileLabels.length];
-    });
-    sphereEdges = buildEdges(sphereNodes, 0.48);
-    coreNodes = makeSphereNodes(60, SPHERE_R * 0.35);
-    coreEdges = buildEdges(coreNodes, 0.6);
-  }
-
-  // -- Back to Solar System overview --
-  function backToSolarSystem() {
-    focusedPlanet = null;
-    showPlanets = true;
-
-    // Restore SUN sphere with original labels
-    sphereNodes = makeSphereNodes(NODE_COUNT, SPHERE_R);
-    if (originalFileLabels) {
-      sphereNodes.forEach(function(n, i) {
-        n.label = originalFileLabels[i % originalFileLabels.length];
-      });
-    } else {
-      sphereNodes.forEach(function(n, i) {
-        n.label = FILE_LABELS[i % FILE_LABELS.length];
-      });
-    }
-    sphereEdges = buildEdges(sphereNodes, 0.48);
-    coreNodes = makeSphereNodes(60, SPHERE_R * 0.35);
-    coreEdges = buildEdges(coreNodes, 0.6);
-  }
-
-  // -- Click handler for planet selection --
-  if (bgCanvas) {
-    bgCanvas.addEventListener('click', function(e) {
-      if (!jarvisActive || !showPlanets) return;
-      for (var i = 0; i < planets.length; i++) {
-        var p = planets[i];
-        var dx = e.clientX - p.screenX;
-        var dy = e.clientY - p.screenY;
-        var dist = Math.sqrt(dx * dx + dy * dy);
-        var hitRadius = Math.max(p.planetRadius * sphereScaleCurrent * 2.5, 35);
-        if (dist < hitRadius) {
-          focusOnPlanet(i);
-          break;
-        }
-      }
-    });
-  }
+  // (old Fibonacci-sphere / solar-system engine removed - scenes live in senju-scenes.js)
 
   // -- HSL color helper --
   function hsl(h, s, l, a) {
@@ -1625,428 +2107,94 @@ document.addEventListener('DOMContentLoaded', () => {
     return '#' + ((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
   }
 
-  // -- DRAW FRAME --
+  // ─────────────────────────────────────────────────────────────
+  // SCENE ENGINE (senju-scenes.js) — 11 switchable 3D visuals
+  // ─────────────────────────────────────────────────────────────
+  var sceneList = (window.SenjuScenes && window.SenjuScenes.list) || [];
+  var sceneIdx = 0;
+  try {
+    var savedScene = localStorage.getItem('senjuScene');
+    for (var si = 0; si < sceneList.length; si++) if (sceneList[si].id === savedScene) sceneIdx = si;
+  } catch (e) {}
+  var sceneData = { attendance: null, exams: null, memories: [] };
+  var voiceStatusForScene = 'idle';
+  var lastFrameTs = 0;
+  var sceneNameFlash = 0;
+
+  async function loadSceneData() {
+    try { sceneData.attendance = await window.dvsc.getAttendance(); } catch (e) {}
+    try { sceneData.exams = await window.dvsc.getExams(); } catch (e) {}
+    try { if (window.dvsc.getMemories) sceneData.memories = await window.dvsc.getMemories(); } catch (e) {}
+  }
+
+  function sceneEnv(dt) {
+    return {
+      ctx: bgCtx, W: W, H: H, t: t, dt: dt,
+      hue: currentBaseHue,
+      energy: Math.max(0, Math.min(2, voiceEnergy)),
+      bands: senjuFreqData,
+      status: voiceStatusForScene,
+      mouse: mouseCurrent,
+      scale: sphereScaleCurrent,
+      data: sceneData,
+      hsl: hsl,
+    };
+  }
+
+  function setScene(idxOrId, announce) {
+    var idx = typeof idxOrId === 'number'
+      ? (idxOrId + sceneList.length) % sceneList.length
+      : sceneList.findIndex(function (sc) { return sc.id === idxOrId; });
+    if (idx < 0 || !sceneList.length) return false;
+    sceneIdx = idx;
+    try { localStorage.setItem('senjuScene', sceneList[idx].id); } catch (e) {}
+    try { sceneList[idx].init(sceneEnv(0.016)); } catch (e) { console.warn('[SENJU] scene init failed:', e); }
+    sceneNameFlash = 2.4;
+    if (announce && typeof setResponse === 'function') setResponse('Visual: ' + sceneList[idx].name);
+    return true;
+  }
+  window.senjuSetScene = setScene;
+
   function drawFrame(ts) {
     if (!bgCtx) return;
-    bgCtx.clearRect(0, 0, W, H);
+    var dt = lastFrameTs ? Math.min(0.05, (ts - lastFrameTs) / 1000) : 0.016;
+    lastFrameTs = ts;
+    t += dt;
 
-    t = ts * 0.001;
-    autoRotY += 0.003;
+    mouseCurrent.x += (mouseTarget.x - mouseCurrent.x) * 0.06;
+    mouseCurrent.y += (mouseTarget.y - mouseCurrent.y) * 0.06;
+    sphereScaleCurrent += (sphereScaleTarget - sphereScaleCurrent) * 0.08;
 
-    // -- Update mood color palette --
-    paletteLerpT += (1 / 60) / paletteChangeInterval; // approx 60fps
+    paletteLerpT += dt / paletteChangeInterval;
     if (paletteLerpT >= 1) {
       paletteLerpT = 0;
       currentPaletteIdx = nextPaletteIdx;
       nextPaletteIdx = (nextPaletteIdx + 1) % MOOD_PALETTES.length;
     }
-    var smoothT = paletteLerpT * paletteLerpT * (3 - 2 * paletteLerpT); // smoothstep
-    currentBaseHue = lerpHue(MOOD_PALETTES[currentPaletteIdx].baseHue, MOOD_PALETTES[nextPaletteIdx].baseHue, smoothT);
-    var currentBgTint = lerpColor(MOOD_PALETTES[currentPaletteIdx].bgTint, MOOD_PALETTES[nextPaletteIdx].bgTint, smoothT);
-    var H2 = (currentBaseHue + 120) % 360; // complementary offset
-    var H3 = (currentBaseHue + 60) % 360;  // triadic offset
+    currentBaseHue = lerpHue(MOOD_PALETTES[currentPaletteIdx].baseHue, MOOD_PALETTES[nextPaletteIdx].baseHue, paletteLerpT);
 
-    // -- Mouse-driven rotation --
-    mouseCurrent.x += (mouseTarget.x - mouseCurrent.x) * 0.06;
-    mouseCurrent.y += (mouseTarget.y - mouseCurrent.y) * 0.06;
-
-    var targetRotY = (mouseCurrent.x - 0.5) * Math.PI * 2.5;
-    var targetRotX = (mouseCurrent.y - 0.5) * Math.PI * 1.5;
-
-    var Kdrive = mouseDown ? 0.08 : 0.02;
-    sphereRotYvel += (targetRotY - sphereRotY) * Kdrive;
-    sphereRotXvel += (targetRotX - sphereRotX) * Kdrive;
-    sphereRotYvel *= 0.90;
-    sphereRotXvel *= 0.90;
-    sphereRotY += sphereRotYvel;
-    sphereRotX += sphereRotXvel;
-
-    var finalRotY = sphereRotY + autoRotY;
-    var cx = W / 2, cy = H / 2;
-
-    // -- Deep space background (mood tinted) --
-    var bg = bgCtx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.7);
-    bg.addColorStop(0, currentBgTint);
-    bg.addColorStop(0.4, hsl(currentBaseHue, 30, 3, 1));
-    bg.addColorStop(1, '#000003');
+    bgCtx.clearRect(0, 0, W, H);
+    var bg = bgCtx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, lerpColor(MOOD_PALETTES[currentPaletteIdx].bgTint, MOOD_PALETTES[nextPaletteIdx].bgTint, paletteLerpT));
+    bg.addColorStop(1, '#05030c');
     bgCtx.fillStyle = bg;
     bgCtx.fillRect(0, 0, W, H);
 
-    // -- Outer ambient glow (breathing) --
-    var breathe = 0.5 + 0.5 * Math.sin(t * 0.8);
-    var glowR = SPHERE_R * 1.6;
-    var outerGlow = bgCtx.createRadialGradient(cx, cy, SPHERE_R * 0.1, cx, cy, glowR);
-    outerGlow.addColorStop(0, hsl(currentBaseHue, 100, 50, 0.06 + 0.03 * breathe));
-    outerGlow.addColorStop(0.3, hsl(H3, 80, 40, 0.04));
-    outerGlow.addColorStop(0.6, hsl(H2, 90, 50, 0.02));
-    outerGlow.addColorStop(1, 'transparent');
-    bgCtx.beginPath();
-    bgCtx.arc(cx, cy, glowR, 0, Math.PI * 2);
-    bgCtx.fillStyle = outerGlow;
-    bgCtx.fill();
-
-    // -- Inner core glow (bright center) --
-    var coreGlow = bgCtx.createRadialGradient(cx, cy, 0, cx, cy, SPHERE_R * 0.4);
-    coreGlow.addColorStop(0, hsl(currentBaseHue - 20, 100, 70, 0.15 + 0.08 * breathe));
-    coreGlow.addColorStop(0.5, hsl(currentBaseHue, 100, 50, 0.06));
-    coreGlow.addColorStop(1, 'transparent');
-    bgCtx.beginPath();
-    bgCtx.arc(cx, cy, SPHERE_R * 0.4, 0, Math.PI * 2);
-    bgCtx.fillStyle = coreGlow;
-    bgCtx.fill();
-
-    // -- Draw inner core sphere (small neural net inside) --
-    var coreProjected = coreNodes.map(function(n) {
-      var pulse = 0.9 + 0.1 * Math.sin(t * n.speed * 15 + n.pulse);
-      var r1 = rotY(n.ox, n.oy, n.oz, finalRotY * 1.5);
-      var r2 = rotX(r1.x, r1.y, r1.z, sphereRotX * 1.2);
-      return {
-        px: cx + r2.x * n.r * pulse,
-        py: cy + r2.y * n.r * pulse,
-        depth: (r2.z + 1) / 2, z: r2.z
-      };
-    });
-
-    // Core edges
-    coreEdges.forEach(function(edge) {
-      var a = coreProjected[edge[0]], b = coreProjected[edge[1]], dist = edge[2];
-      var avgDepth = (a.depth + b.depth) / 2;
-      var alpha = avgDepth * 0.5 * (1 - dist / 0.6);
-      if (alpha < 0.02) return;
-      bgCtx.beginPath();
-      bgCtx.moveTo(a.px, a.py);
-      bgCtx.lineTo(b.px, b.py);
-      bgCtx.strokeStyle = hsl(currentBaseHue - 30, 100, 70, alpha * 0.6);
-      bgCtx.lineWidth = 0.5;
-      bgCtx.stroke();
-    });
-
-    // Core nodes
-    coreProjected.forEach(function(p) {
-      var r = 1.5 * p.depth + 0.5;
-      bgCtx.beginPath();
-      bgCtx.arc(p.px, p.py, r, 0, Math.PI * 2);
-      bgCtx.fillStyle = hsl(currentBaseHue - 20, 100, 80, 0.3 + p.depth * 0.4);
-      bgCtx.fill();
-    });
-
-    // -- Mouse scroll driven scale (smooth lerp) --
-    sphereScaleCurrent += (sphereScaleTarget - sphereScaleCurrent) * 0.08;
-    var sphereScale = sphereScaleCurrent;
-
-    // -- Project main sphere nodes --
-    var projected = sphereNodes.map(function(n, idx) {
-      var pulse = 0.94 + 0.06 * Math.sin(t * n.speed * 10 + n.pulse);
-      var scaledR = n.r * sphereScale;
-      var r1 = rotY(n.ox, n.oy, n.oz, finalRotY);
-      var r2 = rotX(r1.x, r1.y, r1.z, sphereRotX);
-      return {
-        px: cx + r2.x * scaledR * pulse,
-        py: cy + r2.y * scaledR * pulse,
-        depth: (r2.z + 1) / 2, z: r2.z,
-        label: n.label || ''
-      };
-    });
-
-    // -- Draw edges with gradient colors --
-    sphereEdges.forEach(function(edge) {
-      var a = projected[edge[0]], b = projected[edge[1]], dist = edge[2];
-      var avgDepth = (a.depth + b.depth) / 2;
-      var alpha = avgDepth * 0.6 * (1 - dist / 0.48);
-      if (alpha < 0.02) return;
-
-      bgCtx.beginPath();
-      bgCtx.moveTo(a.px, a.py);
-      bgCtx.lineTo(b.px, b.py);
-
-      // Color shifts based on depth using current mood hue
-      var hue = currentBaseHue - avgDepth * 120;
-      bgCtx.strokeStyle = hsl(hue, 90, 55 + avgDepth * 20, alpha);
-      bgCtx.lineWidth = 0.6 + avgDepth * 0.6;
-      bgCtx.stroke();
-    });
-
-    // -- Draw nodes with glow --
-    projected.forEach(function(p) {
-      var r = 2.2 * p.depth + 0.6;
-      var alpha = 0.3 + p.depth * 0.7;
-      bgCtx.beginPath();
-      bgCtx.arc(p.px, p.py, r, 0, Math.PI * 2);
-
-      var nodeHue = currentBaseHue;
-      if (p.depth > 0.65) {
-        nodeHue = currentBaseHue - p.depth * 60;
-        bgCtx.fillStyle = hsl(nodeHue, 100, 70, alpha);
-        bgCtx.shadowColor = hsl(nodeHue, 100, 60, 1);
-        bgCtx.shadowBlur = 12;
-      } else {
-        bgCtx.fillStyle = hsl(currentBaseHue - 50, 60, 50, alpha * 0.5);
-        bgCtx.shadowBlur = 0;
-      }
-      bgCtx.fill();
-      bgCtx.shadowBlur = 0;
-
-      // -- File label on front-facing nodes --
-      if (p.depth > 0.55 && p.label) {
-        var labelAlpha = (p.depth - 0.55) * 2.2;
-        if (labelAlpha > 1) labelAlpha = 1;
-        var isFolder = p.label.indexOf('/') !== -1;
-        var fontSize = isFolder ? 9 : 8;
-        bgCtx.font = (isFolder ? 'bold ' : '') + fontSize + 'px Orbitron, monospace';
-        bgCtx.fillStyle = isFolder
-          ? hsl(H3, 100, 70, labelAlpha * 0.85)
-          : hsl(H2, 90, 80, labelAlpha * 0.7);
-        bgCtx.textAlign = 'center';
-        bgCtx.fillText(p.label, p.px, p.py - r - 4);
-      }
-    });
-
-    // -- SUN / PLANET label + rays --
-    if (focusedPlanet) {
-      // Show focused planet name instead of SUN
-      bgCtx.font = 'bold 13px Orbitron, sans-serif';
-      bgCtx.fillStyle = hsl(focusedPlanet.hue, 100, 85, 0.8 + 0.15 * Math.sin(t * 1.5));
-      bgCtx.textAlign = 'center';
-      bgCtx.fillText('\u25C9 ' + focusedPlanet.name, cx, cy + SPHERE_R * sphereScale + 22);
-
-      // "BACK" button text
-      bgCtx.font = 'bold 11px Orbitron, sans-serif';
-      bgCtx.fillStyle = hsl(currentBaseHue, 80, 75, 0.6 + 0.2 * Math.sin(t * 2));
-      bgCtx.textAlign = 'left';
-      bgCtx.fillText('\u25C0 BACK TO SOLAR SYSTEM [Backspace]', 30, 80);
-    } else {
-      // SUN label
-      bgCtx.font = 'bold 11px Orbitron, sans-serif';
-      bgCtx.fillStyle = hsl(currentBaseHue, 100, 85, 0.7 + 0.2 * Math.sin(t * 1.5));
-      bgCtx.textAlign = 'center';
-      bgCtx.fillText('\u2600 S U N', cx, cy + SPHERE_R * sphereScale + 22);
+    var scene = sceneList[sceneIdx];
+    if (scene) {
+      try { scene.draw(sceneEnv(dt)); } catch (e) { console.warn('[SENJU] scene draw failed:', e); }
     }
 
-    // Sun/Planet corona rays
-    var rayHue = focusedPlanet ? focusedPlanet.hue : currentBaseHue;
-    for (var sri = 0; sri < 20; sri++) {
-      var srayAngle = (sri / 20) * Math.PI * 2 + t * 0.25;
-      var srayInner = SPHERE_R * 1.08 * sphereScale;
-      var srayOuter = SPHERE_R * (1.18 + 0.06 * Math.sin(t * 2.5 + sri * 0.8)) * sphereScale;
-      var srx1 = cx + Math.cos(srayAngle) * srayInner;
-      var sry1 = cy + Math.sin(srayAngle) * srayInner;
-      var srx2 = cx + Math.cos(srayAngle) * srayOuter;
-      var sry2 = cy + Math.sin(srayAngle) * srayOuter;
-      bgCtx.beginPath();
-      bgCtx.moveTo(srx1, sry1);
-      bgCtx.lineTo(srx2, sry2);
-      bgCtx.strokeStyle = hsl(rayHue, 100, 75, 0.12 + 0.08 * Math.sin(t * 3 + sri));
-      bgCtx.lineWidth = 1.2;
-      bgCtx.stroke();
-    }
+    bgCtx.textAlign = 'left';
+    bgCtx.font = '11px Orbitron, monospace';
+    var hudAlpha = sceneNameFlash > 0 ? Math.min(1, sceneNameFlash) : 0.4;
+    if (sceneNameFlash > 0) sceneNameFlash -= dt;
+    bgCtx.fillStyle = hsl(currentBaseHue, 90, 75, hudAlpha);
+    bgCtx.fillText('◈ ' + (scene ? scene.name.toUpperCase() : '-') + '  (' + (sceneIdx + 1) + '/' + sceneList.length + ')', 24, H - 26);
+    bgCtx.fillStyle = hsl(currentBaseHue, 60, 65, hudAlpha * 0.6);
+    bgCtx.fillText('◀ ▶ SWITCH · BOLO "SAKURA MODE", "GALAXY MODE"...', 24, H - 12);
 
-    // -- SOLAR SYSTEM: Draw planets at FIXED positions --
-    if (showPlanets) {
-      planets.forEach(function(planet, pIdx) {
-        // Gentle self-rotation only (NO orbit movement)
-        planet.rotAngle += 0.006;
-
-        // FIXED position (angle never changes)
-        var pOrbitX = Math.cos(planet.angle) * planet.orbitRadius * sphereScale;
-        var pOrbitY = Math.sin(planet.angle) * planet.orbitRadius * planet.tilt * sphereScale;
-
-        var planetCX = cx + pOrbitX;
-        var planetCY = cy + pOrbitY;
-
-        // Store screen position for click detection
-        planet.screenX = planetCX;
-        planet.screenY = planetCY;
-
-        // Draw orbit path (subtle dotted circle)
-        bgCtx.beginPath();
-        bgCtx.ellipse(cx, cy,
-          planet.orbitRadius * sphereScale,
-          planet.orbitRadius * planet.tilt * sphereScale,
-          0, 0, Math.PI * 2);
-        bgCtx.strokeStyle = hsl(planet.hue, 50, 45, 0.04 + 0.02 * Math.sin(t * 0.5 + pIdx));
-        bgCtx.lineWidth = 0.6;
-        bgCtx.setLineDash([4, 6]);
-        bgCtx.stroke();
-        bgCtx.setLineDash([]);
-
-        // Connection line from sun to planet
-        bgCtx.beginPath();
-        bgCtx.moveTo(cx, cy);
-        bgCtx.lineTo(planetCX, planetCY);
-        var lineGrad = bgCtx.createLinearGradient(cx, cy, planetCX, planetCY);
-        lineGrad.addColorStop(0, hsl(currentBaseHue, 80, 60, 0.1));
-        lineGrad.addColorStop(0.5, hsl(planet.hue, 60, 50, 0.06));
-        lineGrad.addColorStop(1, hsl(planet.hue, 80, 60, 0.12));
-        bgCtx.strokeStyle = lineGrad;
-        bgCtx.lineWidth = 0.4;
-        bgCtx.stroke();
-
-        // Planet glow
-        var pGlowR = planet.planetRadius * sphereScale * 2.5;
-        var pGlow = bgCtx.createRadialGradient(planetCX, planetCY, 0, planetCX, planetCY, pGlowR);
-        pGlow.addColorStop(0, hsl(planet.hue, 100, 60, 0.18));
-        pGlow.addColorStop(0.5, hsl(planet.hue, 80, 50, 0.06));
-        pGlow.addColorStop(1, 'transparent');
-        bgCtx.beginPath();
-        bgCtx.arc(planetCX, planetCY, pGlowR, 0, Math.PI * 2);
-        bgCtx.fillStyle = pGlow;
-        bgCtx.fill();
-
-        // Project planet's mini-sphere nodes
-        var pProjected = planet.nodes.map(function(n) {
-          var pulse = 0.92 + 0.08 * Math.sin(t * n.speed * 12 + n.pulse);
-          var r1 = rotY(n.ox, n.oy, n.oz, planet.rotAngle);
-          var r2 = rotX(r1.x, r1.y, r1.z, planet.rotAngle * 0.6);
-          return {
-            px: planetCX + r2.x * n.r * pulse * sphereScale,
-            py: planetCY + r2.y * n.r * pulse * sphereScale,
-            depth: (r2.z + 1) / 2,
-            z: r2.z,
-            label: n.label || ''
-          };
-        });
-
-        // Draw planet edges
-        planet.edges.forEach(function(edge) {
-          var a = pProjected[edge[0]], b = pProjected[edge[1]], dist = edge[2];
-          var avgDepth = (a.depth + b.depth) / 2;
-          var alpha = avgDepth * 0.45 * (1 - dist / 0.6);
-          if (alpha < 0.015) return;
-          bgCtx.beginPath();
-          bgCtx.moveTo(a.px, a.py);
-          bgCtx.lineTo(b.px, b.py);
-          bgCtx.strokeStyle = hsl(planet.hue, 80, 55 + avgDepth * 20, alpha);
-          bgCtx.lineWidth = 0.35 + avgDepth * 0.3;
-          bgCtx.stroke();
-        });
-
-        // Draw planet nodes
-        pProjected.forEach(function(p) {
-          var r = 1.4 * p.depth + 0.4;
-          var alpha = 0.2 + p.depth * 0.6;
-          bgCtx.beginPath();
-          bgCtx.arc(p.px, p.py, r, 0, Math.PI * 2);
-          if (p.depth > 0.55) {
-            bgCtx.fillStyle = hsl(planet.hue, 100, 70, alpha);
-            bgCtx.shadowColor = hsl(planet.hue, 100, 60, 1);
-            bgCtx.shadowBlur = 6;
-          } else {
-            bgCtx.fillStyle = hsl(planet.hue, 50, 45, alpha * 0.35);
-            bgCtx.shadowBlur = 0;
-          }
-          bgCtx.fill();
-          bgCtx.shadowBlur = 0;
-
-          // File labels on front nodes
-          if (p.depth > 0.58 && p.label) {
-            var lAlpha = (p.depth - 0.58) * 2.4;
-            if (lAlpha > 1) lAlpha = 1;
-            var isFolder = p.label.indexOf('/') !== -1;
-            var fSize = isFolder ? 7 : 6;
-            bgCtx.font = (isFolder ? 'bold ' : '') + fSize + 'px Orbitron, monospace';
-            bgCtx.fillStyle = isFolder
-              ? hsl(planet.hue + 80, 100, 75, lAlpha * 0.8)
-              : hsl(planet.hue + 40, 90, 80, lAlpha * 0.65);
-            bgCtx.textAlign = 'center';
-            bgCtx.fillText(p.label, p.px, p.py - r - 3);
-          }
-        });
-
-        // Saturn-specific rings
-        if (planet.name === 'SATURN') {
-          for (var si = 0; si < 2; si++) {
-            bgCtx.beginPath();
-            bgCtx.ellipse(planetCX, planetCY,
-              planet.planetRadius * sphereScale * (1.6 + si * 0.25),
-              planet.planetRadius * sphereScale * 0.15,
-              planet.rotAngle * 0.3, 0, Math.PI * 2);
-            bgCtx.strokeStyle = hsl(planet.hue, 80, 65, 0.2 - si * 0.05);
-            bgCtx.lineWidth = 1.2 - si * 0.3;
-            bgCtx.stroke();
-          }
-        }
-
-        // Planet name label + "CLICK" hint
-        bgCtx.font = 'bold 9px Orbitron, sans-serif';
-        bgCtx.fillStyle = hsl(planet.hue, 100, 80, 0.6);
-        bgCtx.textAlign = 'center';
-        bgCtx.fillText(planet.name, planetCX, planetCY + planet.planetRadius * sphereScale + 12);
-
-        // Hover hint (cursor style set via CSS)
-        bgCtx.font = '7px Orbitron, sans-serif';
-        bgCtx.fillStyle = hsl(planet.hue, 80, 70, 0.35);
-        bgCtx.fillText('[ CLICK ]', planetCX, planetCY + planet.planetRadius * sphereScale + 22);
-      });
-    }
-
-    // -- Orbiting rings --
-    ringParticles.forEach(function(rp) {
-      rp.angle += rp.speed;
-      var rx = Math.cos(rp.angle) * rp.radius;
-      var ry = Math.sin(rp.angle) * rp.radius * 0.1 + rp.tilt * rp.radius * Math.sin(rp.angle);
-      var rz = Math.sin(rp.angle) * rp.radius * 0.3;
-      var r1 = rotY(rx, ry, rz, finalRotY * 0.5);
-      var r2 = rotX(r1.x, r1.y, r1.z, sphereRotX * 0.3);
-      var depth = (r2.z / (SPHERE_R * 1.3) + 1) / 2;
-
-      bgCtx.beginPath();
-      bgCtx.arc(cx + r2.x, cy + r2.y, rp.size * (0.5 + depth * 0.5), 0, Math.PI * 2);
-      bgCtx.fillStyle = hsl(currentBaseHue, 100, 75, rp.alpha * depth);
-      bgCtx.fill();
-    });
-
-    // -- Second ring (tilted 90 degrees) --
-    for (var ri = 0; ri < ringParticles.length; ri += 2) {
-      var rp = ringParticles[ri];
-      var a2 = rp.angle + Math.PI * 0.5;
-      var rx2 = Math.cos(a2) * rp.radius * 0.9;
-      var ry2 = Math.sin(a2) * rp.radius * 0.9 * 0.08;
-      var rz2 = Math.sin(a2) * rp.radius * 0.9;
-      var r1b = rotZ(rx2, ry2, rz2, Math.PI * 0.4);
-      var r2b = rotY(r1b.x, r1b.y, r1b.z, finalRotY * 0.3);
-      var r3b = rotX(r2b.x, r2b.y, r2b.z, sphereRotX * 0.2);
-      var depth2 = (r3b.z / (SPHERE_R * 1.3) + 1) / 2;
-
-      bgCtx.beginPath();
-      bgCtx.arc(cx + r3b.x, cy + r3b.y, rp.size * 0.7 * (0.5 + depth2 * 0.5), 0, Math.PI * 2);
-      bgCtx.fillStyle = hsl(H2, 100, 70, rp.alpha * 0.5 * depth2);
-      bgCtx.fill();
-    }
-
-    // -- Equator ellipse rings --
-    for (var ei = 0; ei < 3; ei++) {
-      var ringTilt = ei * 0.3;
-      var ringAlpha = 0.06 + 0.04 * Math.sin(t * 1.5 + ei);
-      bgCtx.beginPath();
-      bgCtx.ellipse(cx, cy, SPHERE_R * (1.05 + ei * 0.05),
-        SPHERE_R * Math.abs(Math.cos(sphereRotX + ringTilt)) * 0.1 + 3,
-        finalRotY + ei * 0.5, 0, Math.PI * 2);
-      bgCtx.strokeStyle = hsl(currentBaseHue - ei * 40, 80, 60, ringAlpha);
-      bgCtx.lineWidth = 0.8;
-      bgCtx.stroke();
-    }
-
-    // -- Outer boundary circle --
-    bgCtx.beginPath();
-    bgCtx.arc(cx, cy, SPHERE_R * 1.08, 0, Math.PI * 2);
-    bgCtx.strokeStyle = hsl(currentBaseHue, 100, 50, 0.04 + 0.03 * Math.sin(t * 1.3));
-    bgCtx.lineWidth = 1.5;
-    bgCtx.stroke();
-
-    // -- Dust particles --
-    DUST.forEach(function(d) {
-      d.x += d.vx; d.y += d.vy;
-      if (d.x < 0) d.x = 1; if (d.x > 1) d.x = 0;
-      if (d.y < 0) d.y = 1; if (d.y > 1) d.y = 0;
-      bgCtx.beginPath();
-      bgCtx.arc(d.x * W, d.y * H, d.r, 0, Math.PI * 2);
-      bgCtx.fillStyle = hsl(currentBaseHue + (d.hue - 330), 80, 75, d.alpha);
-      bgCtx.fill();
-    });
-
-    // -- Mouse cursor glow on sphere --
-    var hx = cx + (mouseCurrent.x - 0.5) * W * 0.5;
-    var hy = cy + (mouseCurrent.y - 0.5) * H * 0.5;
+    var hx = mouseCurrent.x * W, hy = mouseCurrent.y * H;
     var cursorGlow = bgCtx.createRadialGradient(hx, hy, 0, hx, hy, 40);
     cursorGlow.addColorStop(0, hsl(currentBaseHue, 100, 70, 0.12));
     cursorGlow.addColorStop(1, 'transparent');
@@ -2056,6 +2204,21 @@ document.addEventListener('DOMContentLoaded', () => {
     bgCtx.fill();
 
     animFrame = requestAnimationFrame(drawFrame);
+  }
+
+  // clicks go to the active scene (orrery planets speak their status)
+  if (bgCanvas) {
+    bgCanvas.addEventListener('click', function (e) {
+      if (!jarvisActive) return;
+      var scene = sceneList[sceneIdx];
+      if (scene && scene.click) {
+        var text = scene.click(e.clientX, e.clientY, sceneEnv(0.016));
+        if (text) {
+          setResponse(text);
+          if (typeof window.speak === 'function') window.speak(text);
+        }
+      }
+    });
   }
 
   // -- Waveform canvas --
@@ -2098,6 +2261,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function setStatus(text, cls) {
+    voiceStatusForScene = cls === 'jvoice-listening' ? 'listening'
+      : cls === 'jvoice-thinking' ? 'thinking'
+      : cls === 'jvoice-speaking' ? 'speaking'
+      : /error/i.test(text || '') ? 'error' : 'idle';
     if (!jhudStatusVal) return;
     jhudStatusVal.textContent = text;
     if (jvoiceLabel) {
@@ -2122,8 +2289,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // -- AI Response --
+  var lastReply = '';
+  var busyWithAI = false;
+
   async function sendToAI(text) {
-    if (!text || !window.dvsc) return;
+    if (!text || !window.dvsc || busyWithAI) return;
+    busyWithAI = true;
     setResponse('...');
     setStatus('PROCESSING', 'jvoice-thinking');
     if (jvoiceTranscript) jvoiceTranscript.textContent = '"' + text + '"';
@@ -2134,171 +2305,278 @@ document.addEventListener('DOMContentLoaded', () => {
         var reply = String(result.response || '...')
           .replace(/\[(REMINDER|TIMETABLE|COMMAND)\][\s\S]*?\[\/\1\]/g, '').trim() || 'Ho gaya, Vivek.';
         if (typeof window.senjuRefresh === 'function') window.senjuRefresh(result.refresh);
+        lastReply = reply;
         setResponse(reply);
         setStatus('SPEAKING', 'jvoice-speaking');
+        speakingNow = true;                       // mic ignores SENJU's own voice
         if (typeof window.speak === 'function') await window.speak(reply);
-        setStatus('STANDBY', 'jvoice-idle');
+        speakingNow = false;
+        micGuardUntil = Date.now() + 400;         // ignore the tail / room echo
+        setStatus('LISTENING', 'jvoice-listening');
         if (jvoiceTranscript) jvoiceTranscript.textContent = '';
       } else {
-        setResponse('Error: ' + result.error);
+        setResponse('⚠️ ' + (result.error || 'AI error'));
         setStatus('ERROR', 'jvoice-idle');
+        if (typeof window.speak === 'function') {
+          speakingNow = true;
+          await window.speak('Vivek, AI se jawab nahi mila.');
+          speakingNow = false;
+        }
+        setStatus('LISTENING', 'jvoice-listening');
       }
-    } catch(e) {
+    } catch (e) {
       setResponse('System error: ' + e.message);
       setStatus('ERROR', 'jvoice-idle');
+    } finally {
+      busyWithAI = false;
+      speakingNow = false;
     }
   }
 
-  // -- Voice Activity Detection (VAD) with MediaRecorder --
+  // -- Voice Activity Detection (adaptive, echo-safe) --
   var vadAudioContext = null;
   var vadAnalyser = null;
   var vadMicrophone = null;
+  var vadStream = null;
   var vadRecorder = null;
   var vadChunks = [];
   var isRecording = false;
   var silenceTimer = null;
   var listenLoopActive = false;
+  var senjuFreqData = null;      // live FFT bands, shared with the scene engine
+  var freqPollTimer = null;
+  var speakingNow = false;        // true while SENJU is talking
+  var micGuardUntil = 0;          // short mute window after she stops
+  var noiseFloor = 8;             // learned room noise
+  var loudSince = 0;              // when speech first crossed the threshold
+  var recordStartedAt = 0;
+
+  var SPEECH_START_MS = 250;      // sound must last this long to count as speech
+  var SILENCE_END_MS = 1200;      // quiet for this long = you finished talking
+  var MAX_UTTERANCE_MS = 20000;   // hard stop so one clip can't run forever
+  var MIN_CLIP_MS = 500;          // shorter than this = noise, ignored
 
   async function initSpeechRecognition() {
     listenLoopActive = true;
     try {
-      var stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      vadStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      });
       vadAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (vadAudioContext.state === 'suspended') await vadAudioContext.resume();
       vadAnalyser = vadAudioContext.createAnalyser();
-      vadMicrophone = vadAudioContext.createMediaStreamSource(stream);
+      vadMicrophone = vadAudioContext.createMediaStreamSource(vadStream);
       vadMicrophone.connect(vadAnalyser);
-      vadAnalyser.fftSize = 256;
+      vadAnalyser.fftSize = 512;
+      senjuFreqData = new Uint8Array(vadAnalyser.frequencyBinCount);
+      if (freqPollTimer) clearInterval(freqPollTimer);
+      freqPollTimer = setInterval(function () {
+        if (listenLoopActive && vadAnalyser) { try { vadAnalyser.getByteFrequencyData(senjuFreqData); } catch (e) {} }
+      }, 50);
+      vadAnalyser.smoothingTimeConstant = 0.6;
       var bufferLength = vadAnalyser.frequencyBinCount;
       var dataArray = new Uint8Array(bufferLength);
 
-      vadRecorder = new MediaRecorder(stream);
-
-      vadRecorder.ondataavailable = function(e) {
-        if (e.data.size > 0) vadChunks.push(e.data);
-      };
-
-      vadRecorder.onstop = async function() {
-        if (vadChunks.length > 0) {
-          var blob = new Blob(vadChunks, { type: 'audio/webm' });
-          vadChunks = [];
-          if (listenLoopActive) await processAudioChunk(blob);
+      vadRecorder = new MediaRecorder(vadStream);
+      vadRecorder.ondataavailable = function (e) { if (e.data.size > 0) vadChunks.push(e.data); };
+      vadRecorder.onstop = async function () {
+        var lengthMs = Date.now() - recordStartedAt;
+        var chunks = vadChunks;
+        vadChunks = [];
+        if (listenLoopActive && chunks.length && lengthMs >= MIN_CLIP_MS) {
+          await processAudioChunk(new Blob(chunks, { type: 'audio/webm' }));
         }
-        if (listenLoopActive) checkAudioLevel();
+        if (listenLoopActive) requestAnimationFrame(checkAudioLevel);
       };
 
       setStatus('LISTENING', 'jvoice-listening');
+      requestAnimationFrame(checkAudioLevel);
 
       function checkAudioLevel() {
         if (!listenLoopActive) return;
         vadAnalyser.getByteFrequencyData(dataArray);
         var sum = 0;
-        for (var i = 0; i < bufferLength; i++) { sum += dataArray[i]; }
+        for (var i = 0; i < bufferLength; i++) sum += dataArray[i];
         var average = sum / bufferLength;
+        voiceEnergy = average / 128.0;   // drives the waveform
 
-        // Drive the waveform visually
-        voiceEnergy = average / 128.0;
+        var muted = speakingNow || busyWithAI || Date.now() < micGuardUntil;
+        if (muted) {
+          isRecording = false;
+          loudSince = 0;
+          if (vadRecorder.state === 'recording') { try { vadRecorder.stop(); } catch (e) {} return; }
+          return requestAnimationFrame(checkAudioLevel);
+        }
 
-        var threshold = 30;
+        // learn the room's noise level while nobody is talking
+        if (!isRecording) noiseFloor = noiseFloor * 0.95 + average * 0.05;
+        var threshold = Math.max(10, noiseFloor * 1.8 + 5);
 
         if (average > threshold) {
           if (!isRecording) {
-            isRecording = true;
-            vadChunks = [];
-            vadRecorder.start();
+            if (!loudSince) loudSince = Date.now();
+            if (Date.now() - loudSince >= SPEECH_START_MS) {
+              isRecording = true;
+              recordStartedAt = Date.now();
+              vadChunks = [];
+              try { vadRecorder.start(); } catch (e) {}
+              setStatus('LISTENING', 'jvoice-listening');
+            }
           }
           clearTimeout(silenceTimer);
-          silenceTimer = setTimeout(function() {
-            if (isRecording) {
-              isRecording = false;
-              vadRecorder.stop();
-            }
-          }, 1500);
+          if (isRecording) {
+            silenceTimer = setTimeout(stopUtterance, SILENCE_END_MS);
+          }
+        } else if (!isRecording) {
+          loudSince = 0;
         }
 
-        if (!isRecording) {
-          requestAnimationFrame(checkAudioLevel);
-        }
+        if (isRecording && Date.now() - recordStartedAt > MAX_UTTERANCE_MS) stopUtterance();
+        if (!isRecording) requestAnimationFrame(checkAudioLevel);
       }
 
-      checkAudioLevel();
+      function stopUtterance() {
+        clearTimeout(silenceTimer);
+        if (!isRecording) return;
+        isRecording = false;
+        loudSince = 0;
+        setStatus('PROCESSING', 'jvoice-thinking');
+        try { if (vadRecorder.state === 'recording') vadRecorder.stop(); } catch (e) {}
+      }
+      window.senjuStopUtterance = stopUtterance;
     } catch (err) {
       console.warn('[SENJU] VAD error:', err);
-      if (jvoiceLabel) jvoiceLabel.textContent = '[ MIC PERMISSION DENIED ]';
+      setStatus('MIC BLOCKED', 'jvoice-idle');
+      if (jvoiceLabel) jvoiceLabel.textContent = '[ MIC PERMISSION DENIED — allow the microphone in Windows settings ]';
     }
   }
 
+  // similarity check so SENJU never answers her own voice coming back through the speakers
+  function looksLikeEcho(text) {
+    if (!lastReply) return false;
+    var clean = function (t) { return t.toLowerCase().replace(/[^a-z0-9ऀ-ॿ ]/g, ' ').replace(/\s+/g, ' ').trim(); };
+    var a = clean(text);
+    var b = clean(lastReply);
+    if (!a || a.length < 6) return false;
+    if (b.indexOf(a) !== -1) return true;
+    var words = a.split(' ').filter(function (w) { return w.length > 3; });
+    if (!words.length) return false;
+    var hits = words.filter(function (w) { return b.indexOf(w) !== -1; }).length;
+    return hits / words.length > 0.7;
+  }
+
+  var HALLUCINATIONS = [
+    'thank you', 'thanks for watching', 'please subscribe', 'subscribe to my', 'subtitles by',
+    'bye.', 'you.', 'thank you.', 'subscribe', 'watching', 'music', '. .', 'sa sa sa',
+  ];
+
   async function processAudioChunk(blob) {
-    if (!listenLoopActive) return;
+    if (!listenLoopActive || busyWithAI) return;
+    if (blob.size < 4000) return;   // too small to contain speech
     try {
       var storedSettings = await window.dvsc.getSettings();
       var apiKey = storedSettings && storedSettings.apiKey;
       if (!apiKey) {
-        setResponse('API key not set for Voice.');
+        setResponse('Groq API key missing — add it in Settings.');
+        setStatus('ERROR', 'jvoice-idle');
         return;
       }
 
       var formData = new FormData();
       formData.append('file', new File([blob], 'voice.webm', { type: 'audio/webm' }));
       formData.append('model', 'whisper-large-v3-turbo');
-      formData.append('language', 'hi');
-      formData.append('prompt', 'Vivek SENJU command hindi english');
+      formData.append('temperature', '0');
+      formData.append('prompt', 'Vivek, SENJU. Hinglish commands: chrome kholo, gana chalao, volume badhao, attendance kitni hai, aaj kya padhna hai, WhatsApp message bhejo.');
 
+      var ctrl = new AbortController();
+      var t = setTimeout(function () { ctrl.abort(); }, 20000);
       var res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + apiKey },
-        body: formData
+        headers: { Authorization: 'Bearer ' + apiKey },
+        body: formData,
+        signal: ctrl.signal,
       });
+      clearTimeout(t);
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        var errTxt = await res.text();
+        console.warn('[SENJU] Transcription failed:', res.status, errTxt);
+        setResponse(res.status === 401 ? 'API key galat hai, Vivek.' : 'Sun nahi paayi — phir se bolo.');
+        setStatus('LISTENING', 'jvoice-listening');
+        return;
+      }
+
       var data = await res.json();
       var text = (data.text || '').trim();
+      if (text.length < 3) { setStatus('LISTENING', 'jvoice-listening'); return; }
 
-      if (text.length > 3) {
-        var lower = text.toLowerCase();
-
-        // Filter out common Whisper API hallucinations on silence
-        var hallucinations = [
-          'thank you', 'thanks for watching', 'please subscribe', 'subscribe to my',
-          'subtitles by', 'bye.', 'you.', 'thank you.', 'subscribe', 'watching'
-        ];
-
-        var isHallucination = false;
-        for (var hi = 0; hi < hallucinations.length; hi++) {
-          if (lower.indexOf(hallucinations[hi]) !== -1 && text.length < 35) {
-            isHallucination = true;
-            break;
-          }
+      var lower = text.toLowerCase();
+      for (var hi = 0; hi < HALLUCINATIONS.length; hi++) {
+        if (lower.indexOf(HALLUCINATIONS[hi]) !== -1 && text.length < 35) {
+          console.log('[SENJU] Ignored noise transcript:', text);
+          setStatus('LISTENING', 'jvoice-listening');
+          return;
         }
-
-        if (isHallucination) {
-           console.log('[SENJU] Ignored hallucinated silence text:', text);
-           return;
-        }
-
-        if (jvoiceTranscript) jvoiceTranscript.textContent = text;
-
-        if (lower.indexOf('exit senju') !== -1 || lower.indexOf('band karo senju') !== -1 || lower.indexOf('close senju') !== -1 ||
-            lower.indexOf('exit jarvis') !== -1 || lower.indexOf('close jarvis') !== -1 || lower.indexOf('band karo jarvis') !== -1) {
-          closeSexyMode(); return;
-        }
-        if (lower.indexOf('naya chat') !== -1 || lower.indexOf('new chat') !== -1) {
-          window.dvsc && window.dvsc.createNewChat();
-          setResponse('New session started.'); return;
-        }
-        if (text.length < 20 && (lower.indexOf('stop') !== -1 || lower.indexOf('chup') !== -1 || lower.indexOf('quiet') !== -1)) {
-          if (typeof window.stopAudio === 'function') window.stopAudio();
-          setResponse('Audio stopped.'); setStatus('STANDBY', 'jvoice-idle'); return;
-        }
-        await sendToAI(text);
       }
-    } catch(e) {
-      console.warn('[SENJU] Transcription error:', e);
+      if (looksLikeEcho(text)) {
+        console.log('[SENJU] Ignored own voice echo:', text);
+        setStatus('LISTENING', 'jvoice-listening');
+        return;
+      }
+
+      if (jvoiceTranscript) jvoiceTranscript.textContent = text;
+
+      // visual switching by voice ("sakura mode", "galaxy dikhao", "scene badlo")
+      if (window.SenjuScenes && (/\b(mode|scene|visual)\b/.test(lower) || /dikha/.test(lower))) {
+        if (/\b(next|agla|badlo|change)\b/.test(lower)) {
+          setScene(sceneIdx + 1, true);
+          setStatus('LISTENING', 'jvoice-listening');
+          return;
+        }
+        var wantScene = window.SenjuScenes.match(lower);
+        if (wantScene) {
+          setScene(wantScene, true);
+          setStatus('LISTENING', 'jvoice-listening');
+          return;
+        }
+      }
+
+      // quick voice commands (no AI round-trip)
+      if (/\b(exit|close|band karo|bandh karo)\b.*\b(senju|jarvis|mode)\b/.test(lower) ||
+          /\b(senju|jarvis)\b.*\b(exit|close|band)\b/.test(lower)) {
+        closeSexyMode(); return;
+      }
+      if (lower.indexOf('naya chat') !== -1 || lower.indexOf('new chat') !== -1) {
+        window.dvsc && window.dvsc.createNewChat();
+        setResponse('Nayi baat shuru, Vivek.');
+        setStatus('LISTENING', 'jvoice-listening');
+        return;
+      }
+      if (text.length < 22 && /\b(stop|chup|quiet|ruko|shh)\b/.test(lower)) {
+        if (typeof window.stopAudio === 'function') window.stopAudio();
+        speakingNow = false;
+        setResponse('Chup ho gayi. 🙂');
+        setStatus('LISTENING', 'jvoice-listening');
+        return;
+      }
+
+      await sendToAI(text);
+    } catch (e) {
+      if (e.name === 'AbortError') setResponse('Transcription slow — phir se bolo.');
+      else console.warn('[SENJU] Transcription error:', e);
+      setStatus('LISTENING', 'jvoice-listening');
     }
   }
 
   function stopSpeechRecognition() {
     listenLoopActive = false;
+    isRecording = false;
+    speakingNow = false;
+    busyWithAI = false;
+    loudSince = 0;
     clearTimeout(silenceTimer);
+    if (vadStream) { try { vadStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} vadStream = null; }
     if (vadRecorder && vadRecorder.state !== 'inactive') {
       try { vadRecorder.stop(); } catch(e){}
     }
@@ -2313,24 +2591,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function openSexyMode() {
     jarvisActive = true;
     resizeBgCanvas();
+    lastFrameTs = 0;
 
-    SPHERE_R = Math.min(W, H) * 0.30;
-    sphereNodes = makeSphereNodes(NODE_COUNT, SPHERE_R);
-    sphereEdges = buildEdges(sphereNodes, 0.48);
-
-    // Inner core sphere (smaller, denser)
-    coreNodes = makeSphereNodes(60, SPHERE_R * 0.35);
-    coreEdges = buildEdges(coreNodes, 0.6);
-
-    initRingParticles();
-    initPlanets();
+    loadSceneData().then(function () { setScene(sceneIdx, false); });
+    setScene(sceneIdx, false);
 
     jarvisOverlay.classList.add('active');
     tickClock();
     animFrame = requestAnimationFrame(drawFrame);
     requestAnimationFrame(drawWave);
 
-    setResponse('SENJU online. Move your mouse to control the sphere. Speak naturally for commands or questions.');
+    setResponse('SENJU online. \u25C0 \u25B6 se visual badlo, ya bolo "sakura mode". Naturally baat karo.');
     setStatus('INIT', 'jvoice-idle');
 
     initSpeechRecognition();
@@ -2345,6 +2616,24 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // -- Events --
+  // Space = stop SENJU talking, Esc = leave SENJU mode
+  document.addEventListener('keydown', function (e) {
+    if (!jarvisActive) return;
+    if (e.key === 'Escape') { closeSexyMode(); return; }
+    if (e.key === ']') { setScene(sceneIdx + 1, true); return; }
+    if (e.key === '[') { setScene(sceneIdx - 1, true); return; }
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (typeof window.stopAudio === 'function') window.stopAudio();
+      speakingNow = false;
+      setStatus('LISTENING', 'jvoice-listening');
+    } else if (e.key === 'ArrowRight') {
+      setScene(sceneIdx + 1, true);
+    } else if (e.key === 'ArrowLeft') {
+      setScene(sceneIdx - 1, true);
+    }
+  });
+
   if (btnJarvis) btnJarvis.addEventListener('click', openSexyMode);
   if (jarvisCloseBtn) jarvisCloseBtn.addEventListener('click', closeSexyMode);
   document.addEventListener('keydown', function(e) {

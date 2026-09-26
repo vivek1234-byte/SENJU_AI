@@ -66,6 +66,18 @@
             <span class="nav-icon">📅</span>
             <span class="nav-text">Timetable</span>
           </button>
+          <button class="nav-item" data-view="attendance">
+            <span class="nav-icon">📋</span>
+            <span class="nav-text">Attendance</span>
+          </button>
+          <button class="nav-item" data-view="exams">
+            <span class="nav-icon">🎯</span>
+            <span class="nav-text">Exams</span>
+          </button>
+          <button class="nav-item" data-view="travel">
+            <span class="nav-icon">🚆</span>
+            <span class="nav-text">Travel</span>
+          </button>
           <button class="nav-item" data-view="whatsapp">
             <span class="nav-icon">📱</span>
             <span class="nav-text">WhatsApp</span>
@@ -322,12 +334,251 @@
               </div>
             </div>
             <div class="glass-card">
+              <h3>🚆 Travel (train agent)</h3>
+              <div class="form-group">
+                <label>RapidAPI key (optional — enables live seat availability, seat watch, PNR &amp; running status)</label>
+                <div class="input-with-action">
+                  <input type="password" id="settings-rapidapi" placeholder="Paste your RapidAPI key (IRCTC1 API)">
+                  <button id="toggle-rapidapi" class="btn-ghost">Show</button>
+                </div>
+                <div class="empty-hint">Free at rapidapi.com → search “IRCTC” (IRCTC1 by ApiHub) → Subscribe (Basic, free tier) → copy “X-RapidAPI-Key”. Without it, SENJU still shows trains, fares and site comparison.</div>
+              </div>
+            </div>
+            <div class="glass-card">
               <h3>🗑️ Data Management</h3>
               <button id="clear-chat-btn" class="btn-danger">Clear Chat History</button>
             </div>
             <div class="form-actions">
               <button id="save-settings-btn" class="btn-primary">Save Settings</button>
               <button id="restart-app-btn" class="btn-ghost" style="margin-left: 10px;">Restart App</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attendance View -->
+        <div id="view-attendance" class="view">
+          <div class="view-header">
+            <h2>📋 Attendance</h2>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <label style="text-transform:none; letter-spacing:0;">Target %</label>
+              <input type="number" id="att-target" min="1" max="100" value="75" style="width:80px;">
+              <button id="att-mark-past" class="btn-ghost">+ Mark a class</button>
+            </div>
+          </div>
+          <div class="view-scroll">
+            <div id="att-pending-card" class="glass-card" style="display:none;">
+              <h3>❓ Not marked yet</h3>
+              <div id="att-pending-list"></div>
+            </div>
+
+            <div id="att-manual-form" class="glass-card" style="display:none;">
+              <h3>✍️ Mark a class</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Subject</label>
+                  <input type="text" id="att-m-subject" list="att-subject-list" placeholder="e.g. DBMS">
+                  <datalist id="att-subject-list"></datalist>
+                </div>
+                <div class="form-group">
+                  <label>Date</label>
+                  <input type="date" id="att-m-date">
+                </div>
+                <div class="form-group">
+                  <label>Status</label>
+                  <select id="att-m-status">
+                    <option value="present">✅ Present</option>
+                    <option value="absent">❌ Absent</option>
+                    <option value="cancelled">🚫 Cancelled</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button id="att-m-save" class="btn-primary">Save</button>
+                <button id="att-m-cancel" class="btn-ghost">Cancel</button>
+              </div>
+            </div>
+
+            <div id="att-summary" class="glass-card">
+              <h3>📊 Subject-wise</h3>
+              <div id="att-subject-list-wrap"></div>
+            </div>
+
+            <div id="att-trash-card" class="glass-card" style="display:none;">
+              <h3>🗑️ Recently deleted <button id="att-restore-all" class="att-btn present" style="float:right;">↩ Restore all</button> <button id="att-clear-trash" class="att-btn" style="float:right; margin-right:6px;">Clear</button></h3>
+              <div id="att-trash-list"></div>
+            </div>
+
+            <div class="glass-card">
+              <h3>🕘 Recent marks (only what you mark in SENJU)</h3>
+              <div id="att-recent"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exams View -->
+        <div id="view-exams" class="view">
+          <div class="view-header">
+            <h2>🎯 Exams &amp; Study Plan</h2>
+            <div style="display:flex; gap:8px;">
+              <button id="exam-settings-btn" class="btn-ghost">⚙️ Plan settings</button>
+              <button id="exam-replan-btn" class="btn-ghost">🔄 Rebuild plan</button>
+              <button id="exam-add-btn" class="btn-primary">+ Add Exam</button>
+            </div>
+          </div>
+          <div class="view-scroll">
+            <div id="exam-form" class="glass-card" style="display:none;">
+              <h3 id="exam-form-title">📝 New Exam</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Subject</label>
+                  <input type="text" id="exam-subject" list="att-subject-list" placeholder="e.g. DBMS">
+                </div>
+                <div class="form-group">
+                  <label>Date</label>
+                  <input type="date" id="exam-date">
+                </div>
+                <div class="form-group">
+                  <label>Time (optional)</label>
+                  <input type="time" id="exam-time">
+                </div>
+                <div class="form-group">
+                  <label>Difficulty</label>
+                  <select id="exam-difficulty">
+                    <option value="1">Easy</option>
+                    <option value="2" selected>Normal</option>
+                    <option value="3">Hard</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Topics / syllabus (one per line or comma separated)</label>
+                <textarea id="exam-topics" rows="4" placeholder="Normalization&#10;Transactions&#10;Indexing"></textarea>
+              </div>
+              <div class="form-actions">
+                <button id="exam-save" class="btn-primary">Save Exam</button>
+                <button id="exam-cancel" class="btn-ghost">Cancel</button>
+              </div>
+            </div>
+
+            <div id="exam-settings" class="glass-card" style="display:none;">
+              <h3>⚙️ Study plan settings</h3>
+              <div class="form-row">
+                <div class="form-group"><label>Study from</label><input type="time" id="study-day-start"></div>
+                <div class="form-group"><label>Study until</label><input type="time" id="study-day-end"></div>
+                <div class="form-group"><label>Session length (min)</label><input type="number" id="study-session-min" min="20" max="180"></div>
+                <div class="form-group"><label>Max sessions / day</label><input type="number" id="study-max-day" min="1" max="8"></div>
+                <div class="form-group"><label>Daily briefing at</label><input type="time" id="study-reminder-time"></div>
+              </div>
+              <div class="form-actions">
+                <button id="study-settings-save" class="btn-primary">Save &amp; rebuild plan</button>
+              </div>
+            </div>
+
+            <div id="exam-cards" class="exam-grid"></div>
+
+            <div class="glass-card">
+              <h3>📚 Today's study plan</h3>
+              <div id="study-today"></div>
+            </div>
+
+            <div class="glass-card">
+              <h3>🗓️ Next 7 days</h3>
+              <div id="study-week"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Travel View (train agent) -->
+        <div id="view-travel" class="view">
+          <div class="view-header">
+            <h2>🚆 Travel — Train Agent</h2>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span id="travel-live-badge" class="travel-badge off">Live availability: off</span>
+              <button id="travel-check-watches" class="btn-ghost">🔄 Check watches</button>
+            </div>
+          </div>
+          <div class="view-scroll">
+            <div class="glass-card">
+              <h3>🔍 Find trains</h3>
+              <div class="form-row">
+                <div class="form-group st-wrap">
+                  <label>From</label>
+                  <input type="text" id="travel-from" placeholder="Agra / AGC" autocomplete="off" spellcheck="false">
+                  <div class="st-suggest" id="travel-from-suggest"></div>
+                </div>
+                <div class="form-group st-wrap">
+                  <label>To</label>
+                  <input type="text" id="travel-to" placeholder="Ahmedabad / ADI" autocomplete="off" spellcheck="false">
+                  <div class="st-suggest" id="travel-to-suggest"></div>
+                </div>
+                <div class="form-group">
+                  <label>Date</label>
+                  <input type="date" id="travel-date">
+                </div>
+                <div class="form-group">
+                  <label>Class</label>
+                  <select id="travel-class">
+                    <option value="">Any</option>
+                    <option value="SL">Sleeper (SL)</option>
+                    <option value="3E">AC 3 Economy (3E)</option>
+                    <option value="3A">AC 3 Tier (3A)</option>
+                    <option value="2A">AC 2 Tier (2A)</option>
+                    <option value="1A">First AC (1A)</option>
+                    <option value="CC">Chair Car (CC)</option>
+                    <option value="EC">Executive (EC)</option>
+                    <option value="2S">Second Sitting (2S)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Sort</label>
+                  <select id="travel-sort">
+                    <option value="">Auto</option>
+                    <option value="price">Cheapest first</option>
+                    <option value="duration">Fastest first</option>
+                    <option value="departure">Departure time</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button id="travel-search-btn" class="btn-primary">Search trains</button>
+                <button id="travel-swap-btn" class="btn-ghost" title="Swap stations">⇄ Swap</button>
+                <span id="travel-status" class="empty-hint"></span>
+              </div>
+              <div class="travel-note">SENJU sirf research aur pre-fill karti hai — login, OTP, captcha aur payment aap khud karte ho. Fares approximate base fares hain.</div>
+            </div>
+
+            <div id="travel-summary" class="travel-summary" style="display:none;"></div>
+            <div id="travel-results"></div>
+
+            <div id="travel-sites-card" class="glass-card" style="display:none;">
+              <h3>💳 Where to book — total payable</h3>
+              <div id="travel-sites"></div>
+            </div>
+
+            <div class="glass-card">
+              <h3>👀 Seat watches</h3>
+              <div id="travel-watches"><div class="empty-hint">No watches yet. Search a train and click “Watch seat” on a waitlisted option.</div></div>
+            </div>
+
+            <div class="glass-card">
+              <h3>🎫 PNR &amp; running status</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>PNR (10 digits)</label>
+                  <div class="input-with-action">
+                    <input type="text" id="travel-pnr" placeholder="1234567890" maxlength="10">
+                    <button id="travel-pnr-btn" class="btn-ghost">Check</button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Train number (live status)</label>
+                  <div class="input-with-action">
+                    <input type="text" id="travel-live-no" placeholder="12958" maxlength="5">
+                    <button id="travel-live-btn" class="btn-ghost">Where is it?</button>
+                  </div>
+                </div>
+              </div>
+              <div id="travel-status-out" class="travel-status-out"></div>
             </div>
           </div>
         </div>
@@ -340,7 +591,7 @@
           <div class="view-content" style="text-align: center; margin-top: 40px;">
             <div class="glass-card" style="display: inline-block; padding: 40px; border-radius: 20px;">
               <h3 style="margin-bottom: 20px;">Link Your Device</h3>
-              <p style="margin-bottom: 20px; color: var(--text-muted);">Scan this QR code using your phone's WhatsApp to enable sending messages via AI.</p>
+              <p style="margin-bottom: 20px; color: var(--text-muted);">Scan the QR code with WhatsApp on your phone: Settings → Linked devices → Link a device.</p>
               
               <div id="wa-qr-container">
                 <img id="whatsapp-qr-img" src="" alt="WhatsApp QR Code" style="margin: 20px 0; max-width: 250px; border-radius: 10px; display: none;">
@@ -351,8 +602,16 @@
 
               <p id="whatsapp-status-text" style="color: var(--accent-secondary); font-weight: bold; margin-top: 10px;">Initializing WhatsApp...</p>
               
-              <div id="wa-actions" style="margin-top: 30px; display: none;">
-                <button id="whatsapp-logout-btn" class="btn-danger">Logout / Disconnect</button>
+              <div id="wa-progress" style="display:none; margin: 8px auto 0; width: 240px; height: 6px; border-radius: 4px; background: rgba(255,255,255,0.1); overflow: hidden;">
+                <div id="wa-progress-bar" style="height:100%; width:0%; background: var(--accent-primary); transition: width .3s;"></div>
+              </div>
+
+              <div style="margin-top: 24px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+                <button id="whatsapp-reconnect-btn" class="btn-ghost" style="display:none;">🔄 Reconnect</button>
+                <button id="whatsapp-reset-btn" class="btn-ghost" style="display:none;">🧹 New QR code</button>
+                <div id="wa-actions" style="display: none;">
+                  <button id="whatsapp-logout-btn" class="btn-danger">Logout / Disconnect</button>
+                </div>
               </div>
             </div>
           </div>
@@ -418,6 +677,7 @@
 
   </div><!-- end #jarvis-overlay -->
 
+  <script src="senju-scenes.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

@@ -13,6 +13,9 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Renderer heartbeat: lets the main process log when the UI thread is frozen
+setInterval(() => { try { ipcRenderer.send('renderer-heartbeat'); } catch (_) { /* ignore */ } }, 1000);
+
 contextBridge.exposeInMainWorld('dvsc', {
   // ─────────────────────────────────────────────────────────
   // Window Controls (frameless window)
@@ -126,6 +129,79 @@ contextBridge.exposeInMainWorld('dvsc', {
   updateTimetableEntry: (id, updates) => ipcRenderer.invoke('update-timetable-entry', id, updates),
 
   // ─────────────────────────────────────────────────────────
+  // Attendance
+  // ─────────────────────────────────────────────────────────
+  getAttendance: () => ipcRenderer.invoke('get-attendance'),
+  markAttendance: (payload) => ipcRenderer.invoke('mark-attendance', payload),
+  deleteAttendanceRecord: (id) => ipcRenderer.invoke('delete-attendance-record', id),
+  restoreAttendanceRecord: (id) => ipcRenderer.invoke('restore-attendance-record', id),
+  restoreAllAttendance: () => ipcRenderer.invoke('restore-all-attendance'),
+  clearAttendanceTrash: () => ipcRenderer.invoke('clear-attendance-trash'),
+  setAttendanceBaseline: (subject, totals) => ipcRenderer.invoke('set-attendance-baseline', subject, totals),
+  setAttendanceTarget: (target) => ipcRenderer.invoke('set-attendance-target', target),
+  setAttendanceTrackFrom: (date) => ipcRenderer.invoke('set-attendance-track-from', date),
+  toggleAttendanceIgnore: (subject) => ipcRenderer.invoke('toggle-attendance-ignore', subject),
+  onAttendancePrompt: (callback) => {
+    ipcRenderer.on('attendance-prompt', (_event, payload) => callback(payload));
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // Exams & study planner
+  // ─────────────────────────────────────────────────────────
+  getExams: () => ipcRenderer.invoke('get-exams'),
+  getMemories: () => ipcRenderer.invoke('get-memories'),
+  addExam: (exam) => ipcRenderer.invoke('add-exam', exam),
+  updateExam: (id, updates) => ipcRenderer.invoke('update-exam', id, updates),
+  deleteExam: (id) => ipcRenderer.invoke('delete-exam', id),
+  regenerateStudyPlan: () => ipcRenderer.invoke('regenerate-study-plan'),
+  setStudySessionDone: (id, done) => ipcRenderer.invoke('set-study-session-done', id, done),
+  saveStudySettings: (patch) => ipcRenderer.invoke('save-study-settings', patch),
+  onStudyReminder: (callback) => {
+    ipcRenderer.on('study-reminder', (_event, payload) => callback(payload));
+  },
+  onAcademicsUpdated: (callback) => {
+    ipcRenderer.on('academics-updated', (_event, what) => callback(what));
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // Travel — train agent
+  // ─────────────────────────────────────────────────────────
+  trainSearch: (q) => ipcRenderer.invoke('train-search', q),
+  trainAvailability: (q) => ipcRenderer.invoke('train-availability', q),
+  trainCompareSites: (fare, q) => ipcRenderer.invoke('train-compare-sites', fare, q),
+  trainOpenBooking: (q) => ipcRenderer.invoke('train-open-booking', q),
+  trainBookingUrl: (q) => ipcRenderer.invoke('train-booking-url', q),
+  trainWatchAdd: (w) => ipcRenderer.invoke('train-watch-add', w),
+  trainWatchRemove: (id) => ipcRenderer.invoke('train-watch-remove', id),
+  trainWatchList: () => ipcRenderer.invoke('train-watch-list'),
+  trainWatchCheck: () => ipcRenderer.invoke('train-watch-check'),
+  trainPnr: (pnr) => ipcRenderer.invoke('train-pnr', pnr),
+  trainLive: (no, day) => ipcRenderer.invoke('train-live', no, day),
+  trainLastSearch: () => ipcRenderer.invoke('train-last-search'),
+  trainStations: (q) => ipcRenderer.invoke('train-stations', q),
+  trainInfo: () => ipcRenderer.invoke('train-info'),
+  onTrainSearchResult: (callback) => {
+    ipcRenderer.on('train-search-result', (_event, payload) => callback(payload));
+  },
+  onTrainWatchesUpdated: (callback) => {
+    ipcRenderer.on('train-watches-updated', (_event, payload) => callback(payload));
+  },
+  onTrainAlert: (callback) => {
+    ipcRenderer.on('train-alert', (_event, payload) => callback(payload));
+  },
+  // Booking agent
+  bookingStart: (job) => ipcRenderer.invoke('booking-start', job),
+  bookingCancel: () => ipcRenderer.invoke('booking-cancel'),
+  bookingStatus: () => ipcRenderer.invoke('booking-status'),
+  bookingFocus: () => ipcRenderer.invoke('booking-focus'),
+  travellersList: () => ipcRenderer.invoke('travellers-list'),
+  travellerAdd: (t) => ipcRenderer.invoke('traveller-add', t),
+  travellerRemove: (id) => ipcRenderer.invoke('traveller-remove', id),
+  onBookingStatus: (callback) => {
+    ipcRenderer.on('booking-status', (_event, payload) => callback(payload));
+  },
+
+  // ─────────────────────────────────────────────────────────
   // Location
   // ─────────────────────────────────────────────────────────
   updatePreciseLocation: (coords) => ipcRenderer.invoke('update-precise-location', coords),
@@ -212,6 +288,11 @@ contextBridge.exposeInMainWorld('dvsc', {
 
   getWhatsAppState: () => ipcRenderer.invoke('get-whatsapp-state'),
   logoutWhatsApp: () => ipcRenderer.invoke('whatsapp-logout'),
+  reconnectWhatsApp: () => ipcRenderer.invoke('whatsapp-reconnect'),
+  resetWhatsAppSession: () => ipcRenderer.invoke('whatsapp-reset-session'),
+  onWhatsAppStatus: (callback) => {
+    ipcRenderer.on('whatsapp-status', (_event, status) => callback(status));
+  },
   sendWhatsAppMessage: (contactName, message) => ipcRenderer.invoke('send-whatsapp-msg', contactName, message),
   deleteWhatsAppMessage: () => ipcRenderer.invoke('delete-whatsapp-msg'),
 

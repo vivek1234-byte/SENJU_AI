@@ -12,6 +12,70 @@
 const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { exec } = require('child_process');
+
+// ─────────────────────────────────────────────────────────────
+// Hang diagnostics: senju-main.log (synchronous writes so the last
+// line survives a frozen main process) + event-loop watchdog
+// ─────────────────────────────────────────────────────────────
+const MAIN_LOG = path.join(__dirname, 'senju-main.log');
+let lastTask = 'startup';
+function hb(msg) {
+  try { require('fs').appendFileSync(MAIN_LOG, `[${new Date().toISOString()}] ${msg}\n`); } catch (_) { /* ignore */ }
+}
+try { const st = require('fs').statSync(MAIN_LOG); if (st.size > 512 * 1024) require('fs').renameSync(MAIN_LOG, MAIN_LOG + '.old'); } catch (_) { /* ignore */ }
+hb(`=== SENJU starting (pid ${process.pid}, electron ${process.versions.electron}, node ${process.versions.node}) ===`);
+
+// Every IPC call is logged before it runs; slow ones are flagged.
+const QUIET_IPC = new Set(['get-whatsapp-state', 'train-stations', 'get-settings', 'get-chat-history', 'get-all-chats']);
+const _ipcHandle = ipcMain.handle.bind(ipcMain);
+ipcMain.handle = (channel, fn) => _ipcHandle(channel, async (...args) => {
+  const t0 = Date.now();
+  lastTask = `ipc:${channel}`;
+  if (!QUIET_IPC.has(channel)) hb(`ipc ${channel}`);
+  try {
+    return await fn(...args);
+  } finally {
+    const dt = Date.now() - t0;
+    if (dt > 2000) hb(`SLOW ipc ${channel}: ${dt}ms`);
+  }
+});
+
+// Watchdog: if the main thread was blocked, note how long and what ran last.
+// The renderer pings every second (preload.js); a silent renderer is logged too.
+let lastBeat = Date.now();
+let lastRendererBeat = 0;
+let rendererStalled = false;
+ipcMain.on('renderer-heartbeat', () => {
+  lastRendererBeat = Date.now();
+  if (rendererStalled) { rendererStalled = false; hb('renderer responsive again'); }
+});
+setInterval(() => {
+  const now = Date.now();
+  const gap = now - lastBeat;
+  if (gap > 2500) hb(`MAIN EVENT LOOP BLOCKED ~${gap}ms (last task: ${lastTask})`);
+  lastBeat = now;
+  if (lastRendererBeat && !rendererStalled && now - lastRendererBeat > 4000) {
+    rendererStalled = true;
+    hb(`RENDERER UI THREAD STALLED ~${now - lastRendererBeat}ms (last main task: ${lastTask})`);
+  }
+}, 500).unref();
+
+/** Wrap a periodic check so the log shows what ran before a freeze. */
+function traceTask(name, obj, method) {
+  if (!obj || typeof obj[method] !== 'function') return;
+  const orig = obj[method].bind(obj);
+  obj[method] = (...a) => {
+    lastTask = name;
+    hb(`task ${name}`);
+    const t0 = Date.now();
+    const done = () => { const dt = Date.now() - t0; if (dt > 1000) hb(`SLOW ${name}: ${dt}ms`); };
+    let r;
+    try { r = orig(...a); } catch (e) { hb(`ERROR ${name}: ${e && e.stack || e}`); throw e; }
+    if (r && typeof r.then === 'function') r.then(done, (e) => { hb(`ERROR ${name}: ${e && e.stack || e}`); });
+    else done();
+    return r;
+  };
+}
 // Lazy-loaded (only needed when a command runs) to keep startup fast
 const lazy = {
   get loudness() { return require('loudness'); },
@@ -96,10 +160,15 @@ const DVSCGroq = require('./modules/groq');
 const ReminderManager = require('./modules/reminders');
 const TimetableManager = require('./modules/timetable');
 const ClassAlertScheduler = require('./modules/classAlerts');
+const AttendanceManager = require('./modules/attendance');
+const StudyPlanner = require('./modules/studyPlanner');
+const { importCollegeData } = require('./modules/seedImport');
 const { buildICS } = require('./modules/icsExport');
 const DVSCTts = require('./modules/tts');
 const whatsapp = require('./modules/whatsapp');
 const { ToolExecutor, runSystemCommand } = require('./modules/tools');
+const { TrainAgent, stationSuggestions } = require('./modules/trains');
+const { BookingAgent } = require('./modules/bookingAgent');
 
 // ─────────────────────────────────────────────────────────────
 // Module Instances
@@ -111,6 +180,10 @@ let reminderManager;
 let timetableManager;
 let toolExecutor = null;
 let classAlerts = null;
+let attendance = null;
+let studyPlanner = null;
+let trains = null;
+let booking = null;
 
 /** @type {BrowserWindow|null} */
 let mainWindow = null;
@@ -139,6 +212,17 @@ function createWindow() {
       backgroundThrottling: false, // Required for 24/7 background audio listening
     },
   });
+
+  // Hang / crash diagnostics → senju-main.log next to the app
+  const logLine = (msg) => { console.log(msg); hb(msg); };
+  mainWindow.on('unresponsive', () => logLine('WINDOW UNRESPONSIVE (renderer hung)'));
+  mainWindow.on('responsive', () => logLine('window responsive again'));
+  mainWindow.webContents.on('render-process-gone', (_e, d) => logLine(`RENDERER GONE: ${d.reason} (${d.exitCode})`));
+  mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    if (level >= 2) logLine(`[Renderer ${level === 3 ? 'ERROR' : 'WARN'}] ${message} (${sourceId}:${line})`);
+  });
+  process.on('uncaughtException', (err) => logLine(`UNCAUGHT: ${err && err.stack || err}`));
+  process.on('unhandledRejection', (err) => logLine(`UNHANDLED REJECTION: ${err && err.stack || err}`));
 
   // Load the frontend
   // Forward renderer console logs to terminal
@@ -438,6 +522,16 @@ ipcMain.handle('get-whatsapp-state', () => {
   return whatsapp.getWhatsAppState();
 });
 
+ipcMain.handle('whatsapp-reconnect', async () => {
+  await whatsapp.restartWhatsApp();
+  return { success: true };
+});
+
+ipcMain.handle('whatsapp-reset-session', async () => {
+  await whatsapp.resetWhatsAppSession();
+  return { success: true };
+});
+
 ipcMain.handle('whatsapp-logout', async () => {
   await whatsapp.logoutWhatsApp();
   return { success: true };
@@ -543,6 +637,84 @@ ipcMain.handle('export-timetable-ics', async (_event, opts = {}) => {
 ipcMain.handle('delete-timetable-entry', (_event, id) => {
   return timetableManager.delete(id);
 });
+
+// ─────────────────────────────────────────────────────────────
+// IPC Handlers — Attendance
+// ─────────────────────────────────────────────────────────────
+
+ipcMain.handle('get-attendance', () => attendance.getOverview());
+ipcMain.handle('mark-attendance', (_e, payload) => {
+  try {
+    return { success: true, ...attendance.mark(payload) };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+ipcMain.handle('delete-attendance-record', (_e, id) => attendance.deleteRecord(id));
+ipcMain.handle('restore-attendance-record', (_e, id) => attendance.restoreRecord(id));
+ipcMain.handle('restore-all-attendance', () => attendance.restoreAll());
+ipcMain.handle('clear-attendance-trash', () => attendance.clearTrash());
+ipcMain.handle('set-attendance-baseline', (_e, subject, totals) => {
+  try {
+    return { success: true, baseline: attendance.setBaseline(subject, totals) };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+ipcMain.handle('set-attendance-target', (_e, target) => attendance.setTarget(target));
+ipcMain.handle('set-attendance-track-from', (_e, date) => attendance.setTrackFrom(date));
+ipcMain.handle('toggle-attendance-ignore', (_e, subject) => attendance.toggleIgnore(subject));
+
+// ─────────────────────────────────────────────────────────────
+// IPC Handlers — Exams & Study Planner
+// ─────────────────────────────────────────────────────────────
+
+ipcMain.handle('get-exams', () => studyPlanner.getOverview());
+ipcMain.handle('add-exam', (_e, exam) => {
+  try {
+    return { success: true, exam: studyPlanner.addExam(exam) };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+ipcMain.handle('update-exam', (_e, id, updates) => studyPlanner.updateExam(id, updates));
+ipcMain.handle('delete-exam', (_e, id) => studyPlanner.deleteExam(id));
+ipcMain.handle('regenerate-study-plan', () => {
+  studyPlanner.generatePlan();
+  return studyPlanner.getOverview();
+});
+ipcMain.handle('set-study-session-done', (_e, id, done) => studyPlanner.setSessionDone(id, done));
+ipcMain.handle('save-study-settings', (_e, patch) => studyPlanner.saveSettings(patch));
+
+// ─────────────────────────────────────────────────────────────
+// IPC Handlers — Travel (train agent)
+// ─────────────────────────────────────────────────────────────
+
+const ok = (fn) => async (_e, ...a) => {
+  try { return { success: true, data: await fn(...a) }; }
+  catch (error) { return { success: false, error: error.message }; }
+};
+ipcMain.handle('train-search', ok((q) => trains.search(q)));
+ipcMain.handle('train-availability', ok((q) => trains.availability(q)));
+ipcMain.handle('train-compare-sites', ok((fare, q) => trains.compareSites(fare, q)));
+ipcMain.handle('train-open-booking', ok((q) => trains.openBooking(q)));
+ipcMain.handle('train-booking-url', ok((q) => trains.bookingUrl(q)));
+ipcMain.handle('train-watch-add', ok((w) => trains.addWatch(w)));
+ipcMain.handle('train-watch-remove', ok((id) => trains.removeWatch(id)));
+ipcMain.handle('train-watch-list', ok(() => trains.getWatches()));
+ipcMain.handle('train-watch-check', ok(() => trains.checkWatches()));
+ipcMain.handle('train-pnr', ok((pnr) => trains.pnrStatus(pnr)));
+ipcMain.handle('train-live', ok((no, day) => trains.liveStatus(no, day)));
+ipcMain.handle('train-last-search', () => trains.lastSearch || null);
+ipcMain.handle('train-stations', (_e, q) => stationSuggestions(q));
+ipcMain.handle('train-info', () => ({ liveData: trains.hasLiveData(), sites: trains.sites() }));
+ipcMain.handle('booking-start', ok((job) => booking.book(job)));
+ipcMain.handle('booking-cancel', ok(() => booking.cancel()));
+ipcMain.handle('booking-status', () => booking.getStatus());
+ipcMain.handle('booking-focus', ok(() => booking.bringToFront()));
+ipcMain.handle('travellers-list', () => booking.getTravellers());
+ipcMain.handle('traveller-add', ok((t) => booking.addTraveller(t)));
+ipcMain.handle('traveller-remove', ok((id) => booking.removeTraveller(id)));
 
 // ─────────────────────────────────────────────────────────────
 // IPC Handlers — Settings
@@ -665,12 +837,28 @@ app.whenReady().then(() => {
   reminderManager = reminderMgr;
   timetableManager = timetableMgr;
 
+  // One-time import of the college portal data (seed-data.json in the SENJU folder)
+  try {
+    importCollegeData(store);
+  } catch (e) {
+    console.error('[Import] Failed:', e.message);
+  }
+
+  attendance = new AttendanceManager(store, timetableManager);
+  studyPlanner = new StudyPlanner(store, timetableManager);
+  trains = new TrainAgent(store, { whatsapp, getRapidKey: () => (store.get('settings') || {}).rapidApiKey, getApiKey: () => (store.get('settings') || {}).apiKey });
+  booking = new BookingAgent(store, { getApiKey: () => (store.get('settings') || {}).apiKey });
+
   // Tools the AI can call (web search, weather, reminders, PC control, WhatsApp, memory)
   toolExecutor = new ToolExecutor({
     store,
     reminderManager,
     timetableManager,
     whatsapp,
+    attendance,
+    studyPlanner,
+    trains,
+    booking,
     get loudness() { return lazy.loudness; },
     get YouTube() { return lazy.YouTube; },
     getApiKey: () => store.get('settings').apiKey,
@@ -682,7 +870,7 @@ app.whenReady().then(() => {
 
   // Start WhatsApp (headless Chromium) only after the UI has loaded, so it doesn't slow the window
   mainWindow.webContents.once('did-finish-load', () => {
-    setTimeout(() => whatsapp.initWhatsApp(mainWindow), 4000);
+    setTimeout(() => whatsapp.initWhatsApp(mainWindow), 800);
   });
 
   // Initialize Gemini AI if API key exists
@@ -702,7 +890,19 @@ app.whenReady().then(() => {
 
   // Offline class alerts (default: 15 minutes before each class in the timetable)
   classAlerts = new ClassAlertScheduler(store, timetableManager);
+  traceTask('classAlerts.check', classAlerts, 'check');
+  traceTask('attendance.check', attendance, 'check');
+  traceTask('studyPlanner.check', studyPlanner, 'check');
+  traceTask('trains.checkWatches', trains, 'checkWatches');
+  traceTask('reminders.check', reminderManager, 'checkReminders');
+  traceTask('whatsapp.init', whatsapp, 'initWhatsApp');
   classAlerts.start(mainWindow);
+
+  // Attendance tracker + exam study planner
+  attendance.start(mainWindow);
+  studyPlanner.start(mainWindow);
+  trains.start(mainWindow); // seat-watch poller
+  booking.start(mainWindow);
 
   // Setup System Tray
   // Removed setupSystemTray() to prevent background execution
@@ -746,12 +946,27 @@ function setupSystemTray() {
   });
 }
 
+// Close WhatsApp's headless Chrome cleanly so it never lingers and locks the session
+let whatsappClosed = false;
+app.on('before-quit', (event) => {
+  if (whatsappClosed) return;
+  event.preventDefault();
+  whatsappClosed = true;
+  isQuitting = true;
+  Promise.race([whatsapp.shutdownWhatsApp(), new Promise((r) => setTimeout(r, 4000))])
+    .finally(() => app.quit());
+});
+
 app.on('before-quit', () => {
   isQuitting = true;
+  // Leave the booking Chrome window open (Vivek may be mid-payment); just detach from it.
+  try { if (booking && booking.browser) booking.browser.disconnect(); } catch (_) { /* ignore */ }
 });
 
 app.on('window-all-closed', () => {
   if (reminderManager) reminderManager.stopScheduler();
   if (classAlerts) classAlerts.stop();
+  if (attendance) attendance.stop();
+  if (studyPlanner) studyPlanner.stop();
   if (process.platform !== 'darwin') app.quit();
 });

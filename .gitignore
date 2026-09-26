@@ -8,3 +8,5 @@ whatsapp-session/
 test_boss.mp3
 package-lock.json
 training/
+whatsapp-debug.log
+whatsapp-debug.log.old

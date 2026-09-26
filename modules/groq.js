@@ -11,12 +11,20 @@ const { TOOL_DEFINITIONS } = require('./tools');
  */
 
 // Tried in order. gpt-oss-120b = best reasoning + tool use on Groq; others are fallbacks.
+// Groq retired the Llama models (llama-3.1-8b-instant / llama-3.3-70b-versatile) in Aug 2026.
 const DEFAULT_MODELS = [
   'openai/gpt-oss-120b',
-  'llama-3.3-70b-versatile',
   'openai/gpt-oss-20b',
-  'llama-3.1-8b-instant',
+  'qwen/qwen3.8-27b',
+  'minimaxai/minimax-m2.7',
 ];
+// Old ids that now return 404 — silently mapped to a live model
+const RETIRED = {
+  'llama-3.1-8b-instant': 'openai/gpt-oss-20b',
+  'llama-3.3-70b-versatile': 'openai/gpt-oss-120b',
+  'groq/compound': 'openai/gpt-oss-120b',
+  'groq/compound-mini': 'openai/gpt-oss-20b',
+};
 
 const MAX_TOOL_ROUNDS = 5;
 const HISTORY_LIMIT = 30; // messages kept in the live context
@@ -36,10 +44,14 @@ You live on Vivek's Windows PC and can actually DO things through your tools.
 ## How to think
 - Be genuinely useful and accurate. If you don't know something current (news, prices, scores, dates, facts that change), call web_search — never guess or invent.
 - For weather questions, call get_weather.
-- For "aaj kya plan hai / schedule", check get_timetable and list_reminders.
+- For "aaj kya plan hai / schedule", check get_timetable, list_reminders and get_study_plan.
+- Attendance: when Vivek mentions attending/bunking a class, call mark_attendance right away and tell him the new %. If a subject falls below target, warn him in one short line.
+- Exams: when he mentions an exam date, call add_exam (ask for topics only if he offers them). For "kya padhna hai aaj", call get_study_plan.
 - Resolve relative times ("kal subah 8 baje", "2 ghante baad") using the current date/time below.
 - If a request is ambiguous (which song? which contact? what message?), ask ONE short question instead of guessing.
-- Before shutdown_pc, make sure Vivek clearly asked for it. Before send_whatsapp, Vivek must have given both contact and message.
+- Before shutdown_pc, make sure Vivek clearly asked for it. For WhatsApp: once you have a name and a message, call send_whatsapp immediately — never ask Vivek to repeat or confirm a name he already gave.
+- Trains: for "train dekho / ticket / kitna lagega / kaunsi train sasti", call search_trains (pass station names or codes, the date, and class if he said one). Report the 2–3 best options with fare, timing and the cheapest/fastest tags, plus the average — no long lists. Remind him briefly that the base fare is the same on every site; only fees differ (IRCTC cheapest). If he wants to book, call open_train_booking — YOU never log in, never enter OTP/captcha, never pay; Vivek finishes booking himself. For waitlist worries use watch_train_seat; for "PNR check" use get_pnr_status; for "train kahan hai" use train_live_status. If the date is missing, ask once.
+- Booking: when Vivek says "book karo" for a train, call book_train (use the train number from the last search, class, date, and traveller names he mentions — default: his own profile). Tell him a Chrome window will open and that he must do the IRCTC login (ID, password, captcha) and the final captcha + payment himself; you never do those. If a traveller isn't saved, ask for name, age, gender and berth preference once and call add_traveller. Never say a ticket is booked unless he confirms it.
 - When a tool fails, tell Vivek plainly what went wrong and what he can do.
 - After an action succeeds, confirm in a few words ("Chrome khol diya ✅"). Don't narrate tool names or JSON.
 - Proactively call remember_fact when Vivek shares lasting info about himself (likes, goals, exam dates, people, routines). Use what you remember naturally, without saying "according to my memory".
@@ -65,9 +77,15 @@ class DVSCGroq {
       throw new Error('A valid API key is required to initialize SENJU.');
     }
     this.apiKey = apiKey.trim();
-    if (opts.model && typeof opts.model === 'string') {
-      this.models = [opts.model, ...DEFAULT_MODELS.filter((m) => m !== opts.model)];
+    let preferred = opts.model && typeof opts.model === 'string' ? opts.model.trim() : '';
+    if (RETIRED[preferred]) {
+      console.warn(`[SENJU Brain] ${preferred} was retired by Groq → using ${RETIRED[preferred]}`);
+      preferred = RETIRED[preferred];
     }
+    if (preferred) {
+      this.models = [preferred, ...DEFAULT_MODELS.filter((m) => m !== preferred)];
+    }
+    this.dead = new Set();
     console.log('[SENJU Brain] Initialized. Model chain:', this.models.join(' → '));
   }
 
@@ -127,8 +145,9 @@ ${memBlock}`;
   async _callAPI(messages, { useTools = true, maxTokens = 1024 } = {}) {
     let lastErr;
     this.cooldown = this.cooldown || {};
+    this.dead = this.dead || new Set();
     const now = Date.now();
-    const available = this.models.filter((m) => !(this.cooldown[m] > now));
+    const available = this.models.filter((m) => !this.dead.has(m) && !(this.cooldown[m] > now));
     for (const model of (available.length ? available : this.models)) {
       const body = {
         model,
@@ -158,6 +177,11 @@ ${memBlock}`;
           err.status = res.status;
           // Bad key → no point trying other models
           if (res.status === 401) throw Object.assign(err, { fatal: true });
+          // Model retired / not available on this account → never ask for it again
+          if (res.status === 404 || /model_not_found|does not exist|decommissioned/i.test(text)) {
+            this.dead.add(model);
+            console.warn(`[SENJU Brain] ${model} is not available — dropping it from the list.`);
+          }
           throw err;
         }
         const data = await res.json();
@@ -170,6 +194,9 @@ ${memBlock}`;
         if (e.status === 429) this.cooldown[model] = Date.now() + 60000;
         lastErr = e;
       }
+    }
+    if (this.dead.size && this.dead.size >= this.models.length) {
+      throw new Error('None of the configured Groq models are available on this key. Check console.groq.com/docs/models and set settings.aiModel.');
     }
     throw lastErr || new Error('All models failed.');
   }

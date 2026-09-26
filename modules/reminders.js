@@ -256,6 +256,15 @@ class ReminderManager {
         return;
     }
 
+    // If the reminder was missed for several periods (PC was off), jump to the next
+    // future occurrence instead of firing once per tick until it catches up.
+    const now = Date.now();
+    for (let guard = 0; guard < 1000 && next.getTime() <= now; guard++) {
+      if (reminder.repeat === 'daily') next.setDate(next.getDate() + 1);
+      else if (reminder.repeat === 'weekly') next.setDate(next.getDate() + 7);
+      else next.setMonth(next.getMonth() + 1);
+    }
+
     // Format back to ISO-like string for storage
     reminder.datetime = next.toISOString();
     console.log(`[DVSC Reminders] Rescheduled "${reminder.title}" → ${reminder.datetime} (${reminder.repeat})`);

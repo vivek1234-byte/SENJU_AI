@@ -1028,3 +1028,129 @@ small { color: var(--text-muted); font-size: 11px; }
 .phone-cal-help ol { padding-left: 18px; margin: 6px 0; }
 .phone-cal-help li { margin-bottom: 6px; }
 .phone-cal-help summary { cursor: pointer; margin-top: 6px; }
+
+/* ══════════════════════════════════════
+   ATTENDANCE + EXAMS
+   ══════════════════════════════════════ */
+.view-scroll { flex: 1; overflow-y: auto; padding-right: 4px; }
+
+input[type="number"], input[type="date"], textarea {
+  background: rgba(13, 10, 26, 0.7);
+  border: 1px solid var(--border-soft);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.25s;
+}
+textarea { resize: vertical; }
+input[type="number"]:focus, input[type="date"]:focus, textarea:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(255,110,180,0.12);
+}
+
+.att-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 0; border-bottom: 1px solid var(--border-soft);
+}
+.att-row:last-child { border-bottom: none; }
+.att-row .att-name { font-weight: 700; min-width: 140px; }
+.att-row .att-meta { font-size: 11px; color: var(--text-secondary); }
+.att-actions { display: flex; gap: 6px; margin-left: auto; }
+.att-btn {
+  border-radius: 8px; padding: 5px 10px; font-size: 11px; font-weight: 700;
+  cursor: pointer; background: none; border: 1px solid var(--border-soft); color: var(--text-secondary);
+}
+.att-btn.present { color: var(--success); border-color: rgba(0,255,179,0.4); }
+.att-btn.absent  { color: var(--danger);  border-color: rgba(255,68,102,0.4); }
+.att-btn.cancel  { color: var(--warning); border-color: rgba(255,204,0,0.4); }
+.att-btn:hover { background: rgba(255,255,255,0.06); }
+
+.att-bar { flex: 1; min-width: 120px; height: 8px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.att-bar span { display: block; height: 100%; border-radius: 6px; transition: width .4s; }
+.att-good span    { background: linear-gradient(90deg, #00ffb3, #00d492); }
+.att-warning span { background: linear-gradient(90deg, #ffcc00, #ff9f1c); }
+.att-danger span  { background: linear-gradient(90deg, #ff4466, #ff1e56); }
+.att-none span    { background: var(--text-muted); }
+.att-pct { font-family: 'Orbitron', sans-serif; font-size: 13px; min-width: 62px; text-align: right; }
+.att-advice { font-size: 11px; width: 100%; color: var(--text-secondary); }
+.att-advice.danger { color: var(--danger); }
+.att-advice.warning { color: var(--warning); }
+.att-advice.good { color: var(--success); }
+
+.exam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.exam-card {
+  background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 14px;
+  padding: 14px; position: relative;
+}
+.exam-card.soon { border-color: rgba(255,68,102,0.5); box-shadow: 0 0 18px rgba(255,68,102,0.12); }
+.exam-card h4 { font-size: 14px; margin-bottom: 4px; }
+.exam-days { font-family: 'Orbitron', sans-serif; font-size: 22px; color: var(--accent-primary); }
+.exam-days small { font-size: 10px; color: var(--text-secondary); letter-spacing: 1px; }
+.exam-meta { font-size: 11px; color: var(--text-secondary); margin: 6px 0; }
+.exam-topics { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+.exam-progress { height: 6px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.exam-progress span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); }
+.exam-card-actions { display: flex; gap: 6px; margin-top: 10px; }
+
+.study-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
+.study-row:last-child { border-bottom: none; }
+.study-row.done .study-text { opacity: 0.5; text-decoration: line-through; }
+.study-time { font-family: 'Orbitron', sans-serif; font-size: 11px; color: var(--accent-secondary); min-width: 96px; }
+.study-text { font-size: 13px; }
+.study-text small { display: block; color: var(--text-secondary); font-size: 11px; }
+.study-day-head { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent-primary); margin: 10px 0 4px; }
+.empty-hint { color: var(--text-muted); font-size: 12px; padding: 6px 0; }
+
+.tt-entry .tt-faculty { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+/* ── Travel / train agent ─────────────────────────────────── */
+.travel-badge { font-size: 11px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-muted); }
+.travel-badge.on { color: var(--success); border-color: rgba(0,255,179,0.4); }
+.travel-note { margin-top: 10px; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.travel-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.travel-stat { padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,0.03); }
+.travel-stat .k { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.travel-stat .v { font-family: 'Orbitron', sans-serif; font-size: 16px; margin-top: 4px; }
+.travel-stat .s { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.train-card { display: grid; grid-template-columns: 1.6fr 1.2fr 1.4fr auto; gap: 12px; align-items: center; padding: 12px 14px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,0.02); }
+.train-card.best { border-color: rgba(0,255,179,0.45); box-shadow: 0 0 16px rgba(0,255,179,0.08); }
+.train-card .t-name { font-weight: 600; font-size: 13px; }
+.train-card .t-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.train-card .t-time { font-family: 'Orbitron', sans-serif; font-size: 13px; }
+.train-card .t-dur { font-size: 11px; color: var(--text-muted); }
+.train-card .t-fares { display: flex; flex-wrap: wrap; gap: 5px; }
+.train-card .t-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.fare-chip { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap; }
+.fare-chip.sel { border-color: rgba(255,110,180,0.6); color: #ff9ad0; }
+.tag-chip { font-size: 10px; padding: 2px 7px; border-radius: 999px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.tag-chip.cheapest { background: rgba(0,255,179,0.12); color: var(--success); }
+.tag-chip.fastest { background: rgba(0,180,255,0.12); color: #4fc3ff; }
+.avail { font-size: 11px; margin-top: 4px; }
+.avail.available { color: var(--success); }
+.avail.rac { color: var(--warning); }
+.avail.waitlist, .avail.regret { color: var(--danger); }
+.avail.unknown { color: var(--text-muted); }
+.site-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr auto; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.site-row:last-child { border-bottom: none; }
+.site-row .total { font-family: 'Orbitron', sans-serif; }
+.site-row.best .total { color: var(--success); }
+.watch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.watch-row:last-child { border-bottom: none; }
+.travel-status-out { margin-top: 10px; font-size: 12px; line-height: 1.6; white-space: pre-wrap; color: var(--text-muted); }
+.book-menu { position: relative; display: inline-block; }
+.book-menu .book-list { display: none; position: absolute; right: 0; top: 100%; z-index: 20; min-width: 170px; background: rgba(12,14,24,0.98); border: 1px solid var(--border); border-radius: 10px; padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.book-menu.open .book-list { display: block; }
+.book-list button { display: block; width: 100%; text-align: left; background: none; border: none; color: inherit; padding: 7px 9px; border-radius: 7px; font-size: 12px; cursor: pointer; }
+.book-list button:hover { background: rgba(255,255,255,0.07); }
+@media (max-width: 900px) { .train-card { grid-template-columns: 1fr 1fr; } .site-row { grid-template-columns: 1fr 1fr 1fr; } }
+
+/* custom station suggestions (native <datalist> popups can freeze frameless Electron windows on Windows) */
+.st-wrap { position: relative; }
+.st-suggest { display: none; position: absolute; left: 0; right: 0; top: 100%; z-index: 30; margin-top: 4px; max-height: 220px; overflow-y: auto; background: rgba(12,14,24,0.98); border: 1px solid var(--border); border-radius: 10px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.st-suggest.open { display: block; }
+.st-suggest button { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; background: none; border: none; color: inherit; padding: 7px 9px; border-radius: 7px; font-size: 12px; cursor: pointer; }
+.st-suggest button:hover, .st-suggest button.active { background: rgba(255,255,255,0.08); }
+.st-suggest button small { color: var(--text-muted); font-family: 'Orbitron', sans-serif; font-size: 10px; }

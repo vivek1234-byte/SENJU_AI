@@ -88,6 +88,8 @@ class TimetableManager {
       endTime: entry.endTime || '10:00',
       title: entry.title || 'Untitled',
       category: this._validateCategory(entry.category),
+      code: (entry.code || '').trim(),
+      faculty: (entry.faculty || '').trim(),
       block: (entry.block || '').trim(),
       room: (entry.room || '').trim(),
       createdAt: new Date().toISOString(),
@@ -145,6 +147,8 @@ class TimetableManager {
     if (updates.category !== undefined) entry.category = this._validateCategory(updates.category);
     if (updates.block !== undefined) entry.block = String(updates.block).trim();
     if (updates.room !== undefined) entry.room = String(updates.room).trim();
+    if (updates.code !== undefined) entry.code = String(updates.code).trim();
+    if (updates.faculty !== undefined) entry.faculty = String(updates.faculty).trim();
     entry.updatedAt = new Date().toISOString();
 
     this.store.set('timetable', entries);
