@@ -404,3 +404,158 @@ once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
 [2026-09-26T09:37:58.295Z] task reminders.check
 [2026-09-26T09:37:58.361Z] task classAlerts.check
 [2026-09-26T09:38:15.104Z] ipc window-close
+[2026-09-29T15:49:28.095Z] === SENJU starting (pid 13884, electron 33.4.11, node 20.18.3) ===
+[2026-09-29T15:49:30.312Z] task classAlerts.check
+[2026-09-29T15:49:31.912Z] ipc chat-startup
+[2026-09-29T15:49:31.937Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-09-29T15:49:32.714Z] task whatsapp.init
+[2026-10-02T15:24:13.505Z] === SENJU starting (pid 17484, electron 33.4.11, node 20.18.3) ===
+[2026-10-02T15:24:15.983Z] task classAlerts.check
+[2026-10-02T15:24:17.842Z] ipc chat-startup
+[2026-10-02T15:24:17.875Z] [Renderer WARN] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged. (node:electron/js2c/sandbox_bundle:2)
+[2026-10-02T15:24:17.884Z] ipc tts-speak
+[2026-10-02T15:24:18.640Z] task whatsapp.init
+[2026-10-02T15:24:18.988Z] ipc get-reminders
+[2026-10-02T15:24:18.989Z] ipc get-timetable
+[2026-10-02T15:24:18.990Z] ipc get-attendance
+[2026-10-02T15:24:18.995Z] ipc get-exams
+[2026-10-02T15:24:18.997Z] ipc train-info
+[2026-10-02T15:24:19.036Z] ipc train-watch-list
+[2026-10-02T15:24:19.038Z] ipc train-last-search
+[2026-10-02T15:24:19.045Z] [Renderer WARN] Geolocation error: [object GeolocationPositionError] (file:///C:/Data/SENJU/renderer.js:149)
+[2026-10-02T15:24:24.331Z] ipc chat-message
+[2026-10-02T15:24:31.010Z] task attendance.check
+[2026-10-02T15:24:31.095Z] task trains.checkWatches
+[2026-10-02T15:24:31.100Z] ipc get-attendance
+[2026-10-02T15:24:36.012Z] task classAlerts.check
+[2026-10-02T15:24:36.018Z] task studyPlanner.check
+[2026-10-02T15:24:45.989Z] task reminders.check
+[2026-10-02T15:24:48.982Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1353:20) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:24:48.984Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1353)
+[2026-10-02T15:24:50.163Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1353:20) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:24:50.165Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1353)
+[2026-10-02T15:24:51.384Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1353:20) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:24:51.386Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1353)
+[2026-10-02T15:24:52.171Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1353:20) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:24:52.176Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1353)
+[2026-10-02T15:24:55.985Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1353:20) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:24:55.986Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1353)
+[2026-10-02T15:24:56.014Z] task classAlerts.check
+[2026-10-02T15:25:09.979Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1344:19) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:25:09.980Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1344)
+[2026-10-02T15:25:10.729Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1344:19) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:25:10.731Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1344)
+[2026-10-02T15:25:11.249Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1344:19) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:25:11.252Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1344)
+[2026-10-02T15:25:11.490Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1344:19) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:25:11.492Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1344)
+[2026-10-02T15:25:11.708Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1344:19) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:25:11.710Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1344)
+[2026-10-02T15:25:15.993Z] task reminders.check
+[2026-10-02T15:25:16.008Z] task attendance.check
+[2026-10-02T15:25:16.016Z] task classAlerts.check
+[2026-10-02T15:25:16.021Z] task studyPlanner.check
+[2026-10-02T15:25:17.785Z] ipc mark-attendance
+[2026-10-02T15:25:17.822Z] ipc get-attendance
+[2026-10-02T15:25:17.826Z] ipc get-attendance
+[2026-10-02T15:25:25.976Z] ipc mark-attendance
+[2026-10-02T15:25:26.007Z] ipc get-attendance
+[2026-10-02T15:25:26.010Z] ipc get-attendance
+[2026-10-02T15:25:26.628Z] ipc mark-attendance
+[2026-10-02T15:25:26.661Z] ipc get-attendance
+[2026-10-02T15:25:26.664Z] ipc get-attendance
+[2026-10-02T15:25:26.818Z] ipc mark-attendance
+[2026-10-02T15:25:26.849Z] ipc get-attendance
+[2026-10-02T15:25:26.852Z] ipc get-attendance
+[2026-10-02T15:25:27.016Z] ipc mark-attendance
+[2026-10-02T15:25:27.039Z] ipc get-attendance
+[2026-10-02T15:25:27.043Z] ipc get-attendance
+[2026-10-02T15:25:27.200Z] ipc mark-attendance
+[2026-10-02T15:25:27.224Z] ipc get-attendance
+[2026-10-02T15:25:27.227Z] ipc get-attendance
+[2026-10-02T15:25:27.383Z] ipc mark-attendance
+[2026-10-02T15:25:27.405Z] ipc get-attendance
+[2026-10-02T15:25:27.410Z] ipc get-attendance
+[2026-10-02T15:25:27.560Z] ipc mark-attendance
+[2026-10-02T15:25:27.586Z] ipc get-attendance
+[2026-10-02T15:25:27.591Z] ipc get-attendance
+[2026-10-02T15:25:27.758Z] ipc mark-attendance
+[2026-10-02T15:25:27.779Z] ipc get-attendance
+[2026-10-02T15:25:27.783Z] ipc get-attendance
+[2026-10-02T15:25:27.933Z] ipc mark-attendance
+[2026-10-02T15:25:27.959Z] ipc get-attendance
+[2026-10-02T15:25:27.962Z] ipc get-attendance
+[2026-10-02T15:25:28.133Z] ipc mark-attendance
+[2026-10-02T15:25:28.161Z] ipc get-attendance
+[2026-10-02T15:25:28.165Z] ipc get-attendance
+[2026-10-02T15:25:28.339Z] ipc mark-attendance
+[2026-10-02T15:25:28.364Z] ipc get-attendance
+[2026-10-02T15:25:28.368Z] ipc get-attendance
+[2026-10-02T15:25:28.563Z] ipc mark-attendance
+[2026-10-02T15:25:28.586Z] ipc get-attendance
+[2026-10-02T15:25:28.591Z] ipc get-attendance
+[2026-10-02T15:25:28.762Z] ipc mark-attendance
+[2026-10-02T15:25:28.785Z] ipc get-attendance
+[2026-10-02T15:25:28.790Z] ipc get-attendance
+[2026-10-02T15:25:28.968Z] ipc mark-attendance
+[2026-10-02T15:25:28.998Z] ipc get-attendance
+[2026-10-02T15:25:29.002Z] ipc get-attendance
+[2026-10-02T15:25:29.196Z] ipc mark-attendance
+[2026-10-02T15:25:29.234Z] ipc get-attendance
+[2026-10-02T15:25:29.239Z] ipc get-attendance
+[2026-10-02T15:25:30.861Z] ipc mark-attendance
+[2026-10-02T15:25:30.897Z] ipc get-attendance
+[2026-10-02T15:25:30.902Z] ipc get-attendance
+[2026-10-02T15:25:36.028Z] task classAlerts.check
+[2026-10-02T15:25:46.007Z] task reminders.check
+[2026-10-02T15:25:51.239Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1353:20) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:25:51.241Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1353)
+[2026-10-02T15:25:51.468Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1353:20) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:25:51.469Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1353)
+[2026-10-02T15:25:51.896Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1353:20) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:25:51.897Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1353)
+[2026-10-02T15:25:52.136Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1353:20) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:25:52.138Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1353)
+[2026-10-02T15:25:52.504Z] [Renderer ERROR] [Renderer rejection] Error: prompt() is not supported.
+    at HTMLDivElement.<anonymous> (file:///C:/Data/SENJU/renderer.js:1353:20) (file:///C:/Data/SENJU/renderer.js:7)
+[2026-10-02T15:25:52.504Z] [Renderer ERROR] Uncaught (in promise) Error: prompt() is not supported. (file:///C:/Data/SENJU/renderer.js:1353)
+[2026-10-02T15:25:56.039Z] task classAlerts.check
+[2026-10-02T15:26:06.300Z] ipc delete-exam
+[2026-10-02T15:26:06.337Z] ipc get-exams
+[2026-10-02T15:26:06.349Z] ipc get-exams
+[2026-10-02T15:26:16.017Z] task attendance.check
+[2026-10-02T15:26:16.019Z] task reminders.check
+[2026-10-02T15:26:16.021Z] task studyPlanner.check
+[2026-10-02T15:26:16.048Z] task classAlerts.check
+[2026-10-02T15:26:36.049Z] task classAlerts.check
+[2026-10-02T15:26:46.025Z] task reminders.check
+[2026-10-02T15:26:56.055Z] task classAlerts.check
+[2026-10-02T15:27:02.318Z] ipc window-close
