@@ -106,7 +106,7 @@ class ClassAlertScheduler {
       const n = new Notification({
         title: `📚 Class in ${minsLeft} min: ${entry.title}`,
         body: `🕒 ${time}${venue ? `\n📍 ${venue}` : ''}`,
-        icon: path.join(__dirname, '..', 'assets', 'senju-icon.ico'),
+        icon: require('./platform').APP_ICON,
         urgency: 'critical',
         timeoutType: 'never',
       });

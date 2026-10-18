@@ -169,6 +169,7 @@ const whatsapp = require('./modules/whatsapp');
 const { ToolExecutor, runSystemCommand } = require('./modules/tools');
 const { TrainAgent, stationSuggestions } = require('./modules/trains');
 const { BookingAgent } = require('./modules/bookingAgent');
+const { APP_ICON } = require('./modules/platform');
 
 // ─────────────────────────────────────────────────────────────
 // Module Instances
@@ -204,7 +205,7 @@ function createWindow() {
     minHeight: 600,
     frame: false, // Frameless for custom title bar
     backgroundColor: '#050a15',
-    icon: path.join(__dirname, 'assets', 'senju-icon.ico'),
+    icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -919,7 +920,7 @@ app.whenReady().then(() => {
 
 function setupSystemTray() {
   // Use SENJU app icon for the tray
-  const iconPath = path.join(__dirname, 'assets', 'senju-icon.ico');
+  const iconPath = APP_ICON;
   const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon.isEmpty() ? nativeImage.createFromPath(process.execPath) : icon);
   

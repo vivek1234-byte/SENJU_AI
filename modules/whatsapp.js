@@ -102,12 +102,20 @@ function removeLocks() {
   }
 }
 
+function killPid(pid) {
+  if (process.platform === 'win32') return run('taskkill', ['/PID', String(pid), '/T', '/F']);
+  // Linux: PIDs get reused — only kill it if it's still our WhatsApp Chrome
+  try {
+    if (fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('whatsapp-session')) process.kill(pid, 'SIGKILL');
+  } catch (_) { /* already gone */ }
+  return Promise.resolve();
+}
+
 async function killLeftoverBrowser() {
-  if (process.platform !== 'win32') return;
   // 1) exact process tree we launched last time
   try {
     const pid = parseInt(fs.readFileSync(PID_FILE, 'utf8'), 10);
-    if (pid) await run('taskkill', ['/PID', String(pid), '/T', '/F']);
+    if (pid) await killPid(pid);
   } catch (_) { /* no pid file */ }
   try { fs.rmSync(PID_FILE, { force: true }); } catch (_) { /* ignore */ }
 
@@ -116,11 +124,15 @@ async function killLeftoverBrowser() {
 
   // 2) fallback: any Chrome using our session folder
   log('Lock still present — searching for leftover WhatsApp Chrome');
-  const ps =
-    "Get-CimInstance Win32_Process -Filter \"Name like 'chrome%'\" | " +
-    "Where-Object { $_.CommandLine -like '*whatsapp-session*' } | " +
-    "ForEach-Object { taskkill /PID $_.ProcessId /T /F | Out-Null }";
-  await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], 15000);
+  if (process.platform === 'win32') {
+    const ps =
+      "Get-CimInstance Win32_Process -Filter \"Name like 'chrome%'\" | " +
+      "Where-Object { $_.CommandLine -like '*whatsapp-session*' } | " +
+      "ForEach-Object { taskkill /PID $_.ProcessId /T /F | Out-Null }";
+    await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], 15000);
+  } else {
+    await run('pkill', ['-KILL', '-f', 'user-data-dir=.*whatsapp-session']);
+  }
   await new Promise((r) => setTimeout(r, 500));
   removeLocks();
 }
@@ -132,7 +144,7 @@ async function destroyClient() {
   let pid = null;
   try { pid = c.pupBrowser && c.pupBrowser.process() && c.pupBrowser.process().pid; } catch (_) { /* ignore */ }
   try { await Promise.race([c.destroy(), new Promise((r) => setTimeout(r, 4000))]); } catch (_) { /* ignore */ }
-  if (pid && process.platform === 'win32') await run('taskkill', ['/PID', String(pid), '/T', '/F']);
+  if (pid) await killPid(pid);
   try { fs.rmSync(PID_FILE, { force: true }); } catch (_) { /* ignore */ }
 }
 

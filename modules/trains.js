@@ -12,7 +12,7 @@
  * user's — IRCTC blocks automated booking and it is not worth the account ban.
  */
 
-const { execFile } = require('child_process');
+const platform = require('./platform');
 const path = require('path');
 
 // ─────────────────────────────────────────────────────────────
@@ -202,9 +202,7 @@ async function fetchText(url, opts = {}, timeoutMs = 15000) {
 }
 
 function openInBrowser(url) {
-  execFile('cmd.exe', ['/c', 'start', '', url], { windowsHide: true }, (err) => {
-    if (err) console.error('[Trains] open url failed:', err.message);
-  });
+  platform.openExternal(url, 'Trains');
 }
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -775,7 +773,7 @@ class TrainAgent {
     const body = `${w.trainNo} ${w.trainName || ''} ${w.from}→${w.to} on ${w.date} (${w.cls}): ${a.text}. Book now!`;
     try {
       const { Notification } = require('electron');
-      const n = new Notification({ title, body, icon: path.join(__dirname, '..', 'assets', 'senju-icon.ico') });
+      const n = new Notification({ title, body, icon: platform.APP_ICON });
       n.on('click', () => { try { this.openBooking({ from: w.from, to: w.to, date: w.date, cls: w.cls, site: 'irctc' }); } catch {} });
       n.show();
     } catch (e) { console.warn('[Trains] notification failed:', e.message); }

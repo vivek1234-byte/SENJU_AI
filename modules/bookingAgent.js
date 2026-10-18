@@ -201,7 +201,7 @@ class BookingAgent {
   notify(title, body) {
     try {
       const { Notification } = require('electron');
-      const n = new Notification({ title, body, icon: path.join(__dirname, '..', 'assets', 'senju-icon.ico') });
+      const n = new Notification({ title, body, icon: require('./platform').APP_ICON });
       n.on('click', () => this.bringToFront());
       n.show();
     } catch (_) { /* ignore */ }

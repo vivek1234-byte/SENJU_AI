@@ -9,7 +9,7 @@
  * whenever the model forgot a brace or a closing tag.
  */
 
-const { exec, execFile } = require('child_process');
+const platform = require('./platform');
 
 // ─────────────────────────────────────────────────────────────
 // Tool schemas (OpenAI / Groq format)
@@ -526,25 +526,8 @@ async function fetchJSON(url, opts = {}, timeoutMs = 12000) {
 }
 
 function openInBrowser(url) {
-  // execFile avoids shell-injection from model-generated text
-  execFile('cmd.exe', ['/c', 'start', '', url], { windowsHide: true }, (err) => {
-    if (err) console.error('[SENJU Tools] open url failed:', err.message);
-  });
+  platform.openExternal(url, 'SENJU Tools');
 }
-
-const APP_MAP = {
-  'google chrome': 'chrome', chrome: 'chrome',
-  'microsoft edge': 'msedge', edge: 'msedge',
-  word: 'winword', 'microsoft word': 'winword',
-  excel: 'excel', 'microsoft excel': 'excel',
-  powerpoint: 'powerpnt', 'microsoft powerpoint': 'powerpnt',
-  vscode: 'code', 'vs code': 'code', 'visual studio code': 'code',
-  calculator: 'calc', calc: 'calc',
-  notepad: 'notepad', paint: 'mspaint',
-  'file explorer': 'explorer', explorer: 'explorer',
-  'task manager': 'taskmgr', cmd: 'cmd', terminal: 'wt',
-  settings: 'ms-settings:', spotify: 'spotify:', whatsapp: 'whatsapp:',
-};
 
 const WMO = {
   0: 'clear sky', 1: 'mostly clear', 2: 'partly cloudy', 3: 'overcast', 45: 'fog', 48: 'fog',
@@ -562,12 +545,9 @@ async function runSystemCommand(cmd, deps) {
   if (cmd.action === 'open_app') {
     const raw = String(cmd.target || '').toLowerCase().replace(/_/g, ' ').trim();
     if (!raw) throw new Error('No app specified');
-    const mapped = APP_MAP[raw] || raw.replace(/\s+/g, '');
     // Allow only safe characters — the name comes from the model
-    if (!/^[a-z0-9._:-]+$/i.test(mapped)) throw new Error(`Unsafe app name: ${raw}`);
-    execFile('cmd.exe', ['/c', 'start', '', mapped], { windowsHide: true }, (err) => {
-      if (err) console.error(`[SENJU Tools] open_app ${mapped} failed:`, err.message);
-    });
+    if (!/^[a-z0-9 ._:-]+$/i.test(raw)) throw new Error(`Unsafe app name: ${raw}`);
+    if (!platform.openApp(raw, 'SENJU Tools')) throw new Error(`Couldn't find an app called "${raw}" on this PC`);
     return `Opening ${raw}.`;
   }
 
@@ -615,12 +595,12 @@ async function runSystemCommand(cmd, deps) {
   }
 
   if (cmd.action === 'shutdown') {
-    exec('shutdown /s /t 60', (err) => err && console.error('[SENJU Tools] shutdown failed:', err.message));
+    platform.scheduleShutdown((err) => err && console.error('[SENJU Tools] shutdown failed:', err.message));
     return 'Shutdown scheduled in 60 seconds. Say "cancel shutdown" to stop it.';
   }
 
   if (cmd.action === 'cancel_shutdown') {
-    exec('shutdown /a', () => {});
+    platform.cancelShutdown(() => {});
     return 'Shutdown cancelled.';
   }
 

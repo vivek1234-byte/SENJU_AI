@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "DVSC - Dominance. Vision. Strategy. Control. Your Personal AI Assistant.",
   "main": "main.js",
+  "desktopName": "senju.desktop",
   "scripts": {
     "start": "electron ."
   },

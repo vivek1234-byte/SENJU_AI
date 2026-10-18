@@ -336,7 +336,7 @@ class AttendanceManager {
       const n = new Notification({
         title: `📋 Did you attend ${p.subject}?`,
         body: `${p.startTime}–${p.endTime}${stats.pct != null ? ` • currently ${stats.pct}%` : ''}\nOpen SENJU to mark it.`,
-        icon: path.join(__dirname, '..', 'assets', 'senju-icon.ico'),
+        icon: require('./platform').APP_ICON,
       });
       n.on('click', () => { if (this.window && !this.window.isDestroyed()) { this.window.show(); this.window.focus(); } });
       n.show();

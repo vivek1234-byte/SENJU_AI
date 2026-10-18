@@ -29,7 +29,7 @@
 ### 🔌 Advanced Integrations
 - **WhatsApp Web Integration**: Scan a QR code to link your WhatsApp and have SENJU read or send messages (`whatsapp-web.js`).
 - **YouTube Search**: Directly search for music and videos via voice commands.
-- **System Control**: Adjust Windows system volume (`loudness`) directly from the AI.
+- **System Control**: Adjust system volume (`loudness`) directly from the AI — Windows and Linux.
 - **Reminders & Timetable**: Built-in `electron-store` scheduling system for daily tasks and alarms.
 
 ---
@@ -83,6 +83,18 @@
    ```bash
    npm start
    ```
+
+### 🐧 Linux
+
+SENJU runs on Linux too (tested on Fedora + KDE Plasma). One-time setup:
+
+```bash
+./install-linux.sh
+```
+
+This makes `node_modules` Linux-ready (also fixes a folder copied over from Windows), installs the SENJU icon and app-menu entry, puts a shortcut on the Desktop, and pins SENJU to your dock / taskbar (KDE Plasma or GNOME). After that, launch it from the dock or with `./senju.sh`.
+
+On Linux, volume control uses `amixer` (alsa-utils), shutdown uses `shutdown -h +1`, and apps/links open through `xdg-open` or the matching Linux app (Dolphin, Konsole, KCalc, …).
 
 ## 🎨 File Structure
 
