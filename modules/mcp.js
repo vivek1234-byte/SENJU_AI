@@ -18,6 +18,8 @@ const fs = require('fs');
 const path = require('path');
 
 const CONNECT_TIMEOUT_MS = 30000;
+// Local servers started with `npx -y …` download themselves on first use — slow on Windows
+const STDIO_CONNECT_TIMEOUT_MS = 120000;
 const CALL_TIMEOUT_MS = 120000;
 const MAX_RESULT_CHARS = 8000;
 
@@ -166,7 +168,8 @@ class McpManager {
         if (transport.stderr) transport.stderr.on('data', (d) => this.log(`[MCP ${name}] ${String(d).trim().slice(0, 500)}`));
       }
 
-      await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, `Connecting to "${name}"`);
+      const t0 = Date.now();
+      await withTimeout(client.connect(transport), sc.url ? CONNECT_TIMEOUT_MS : STDIO_CONNECT_TIMEOUT_MS, `Connecting to "${name}"`);
       const tools = [];
       let cursor;
       do {
@@ -184,7 +187,7 @@ class McpManager {
         }
       };
       Object.assign(entry, { client, transport, tools, state: 'connected' });
-      this.log(`[MCP] "${name}" connected (${tools.length} tools).`);
+      this.log(`[MCP] "${name}" connected (${tools.length} tools) in ${((Date.now() - t0) / 1000).toFixed(1)}s.`);
     } catch (e) {
       entry.state = 'error';
       entry.error = e.message;

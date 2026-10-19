@@ -155,7 +155,7 @@ async function appChecks() {
     const code = await Promise.race([exited, sleep(15000).then(() => 'timeout')]);
     check('app quits cleanly', code !== 'timeout', `exit ${code}`);
     if (code === 'timeout') child.kill('SIGKILL');
-    if (results.includes(false)) console.log('\n--- app log (tail) ---\n' + log.split('\n').slice(-40).join('\n'));
+    if (results.includes(false) || process.env.CI) console.log('\n--- app log (tail) ---\n' + log.split('\n').slice(-40).join('\n'));
     fs.rmSync(profile, { recursive: true, force: true });
   }
 }
