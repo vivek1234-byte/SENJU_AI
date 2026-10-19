@@ -13,6 +13,9 @@ const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, nativeImage } = r
 const path = require('path');
 const { exec } = require('child_process');
 
+// Tests (test/smoke.js) run SENJU against a throwaway profile so real data is never touched
+if (process.env.SENJU_USER_DATA) app.setPath('userData', process.env.SENJU_USER_DATA);
+
 // ─────────────────────────────────────────────────────────────
 // Hang diagnostics: senju-main.log (synchronous writes so the last
 // line survives a frozen main process) + event-loop watchdog
@@ -141,7 +144,7 @@ const store = new Store({
   name: 'dvsc-data',
   defaults: {
     settings: {
-      apiKey: '',
+      nvidiaApiKey: '',
       userName: 'Vivek',
       voiceEnabled: true,
       language: 'hi-en',
@@ -152,11 +155,23 @@ const store = new Store({
   },
 });
 
+// Groq was removed — SENJU runs only on NVIDIA now. Drop the old Groq settings.
+const LEGACY_SETTINGS = ['apiKey', 'aiModel', 'aiProvider', 'localModelPath'];
+{
+  const st = store.get('settings') || {};
+  if (LEGACY_SETTINGS.some((k) => k in st)) {
+    for (const k of LEGACY_SETTINGS) delete st[k];
+    store.set('settings', st);
+  }
+}
+const nvidiaKey = () => (store.get('settings') || {}).nvidiaApiKey || '';
+
 // ─────────────────────────────────────────────────────────────
 // Module Imports
 // ─────────────────────────────────────────────────────────────
 
-const DVSCGroq = require('./modules/groq');
+const SenjuBrain = require('./modules/brain');
+const nvidia = require('./modules/nvidia');
 const ReminderManager = require('./modules/reminders');
 const TimetableManager = require('./modules/timetable');
 const ClassAlertScheduler = require('./modules/classAlerts');
@@ -169,6 +184,11 @@ const whatsapp = require('./modules/whatsapp');
 const { ToolExecutor, runSystemCommand } = require('./modules/tools');
 const { TrainAgent, stationSuggestions } = require('./modules/trains');
 const { BookingAgent } = require('./modules/bookingAgent');
+const { APP_ICON } = require('./modules/platform');
+const { McpManager } = require('./modules/mcp');
+
+// MCP servers SENJU can use (config: <userData>/mcp.json, Claude Desktop format)
+const mcp = new McpManager({ configPath: path.join(app.getPath('userData'), 'mcp.json'), log: (m) => console.log(m) });
 
 // ─────────────────────────────────────────────────────────────
 // Module Instances
@@ -204,7 +224,7 @@ function createWindow() {
     minHeight: 600,
     frame: false, // Frameless for custom title bar
     backgroundColor: '#050a15',
-    icon: path.join(__dirname, 'assets', 'senju-icon.ico'),
+    icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -260,7 +280,7 @@ function createWindow() {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Initialize the Groq AI module if an API key is configured.
+ * Initialize the NVIDIA brain if an API key is configured.
  * Also loads the last 20 chat history messages for continuity.
  */
 function initializeAI() {
@@ -268,14 +288,14 @@ function initializeAI() {
 
   try {
     const previousLocation = dvsc ? dvsc.location : null;
-    dvsc = new DVSCGroq();
+    dvsc = new SenjuBrain();
     if (previousLocation) dvsc.setLocation(previousLocation);
     if (toolExecutor) dvsc.setTools(toolExecutor);
-    if (settings.apiKey) {
-      dvsc.initialize(settings.apiKey, { model: settings.aiModel });
-      console.log('[DVSC] Groq initialized.');
+    dvsc.setMcp(mcp);
+    if (settings.nvidiaApiKey) {
+      dvsc.initialize(settings.nvidiaApiKey, { model: settings.nvidiaModel, thinking: settings.nvidiaThinking !== false });
     } else {
-      console.log('[DVSC] No API key found. Groq not initialized.');
+      console.log('[DVSC] No API key found. AI brain not initialized.');
     }
 
     // Migrate legacy chat history if it exists and no new chats exist
@@ -726,14 +746,11 @@ ipcMain.handle('get-settings', () => {
 
 ipcMain.handle('save-settings', (_event, newSettings) => {
   const currentSettings = store.get('settings', {});
-  const providerChanged = newSettings.aiProvider !== currentSettings.aiProvider;
-  const pathChanged = newSettings.localModelPath !== currentSettings.localModelPath;
-  const apiKeyChanged = newSettings.apiKey !== undefined && newSettings.apiKey !== currentSettings.apiKey;
-  const modelChanged = newSettings.aiModel !== undefined && newSettings.aiModel !== currentSettings.aiModel;
-  const configChanged = providerChanged || pathChanged || apiKeyChanged || modelChanged;
+  const configChanged = ['nvidiaApiKey', 'nvidiaModel', 'nvidiaThinking'].some((k) => newSettings[k] !== undefined && newSettings[k] !== currentSettings[k]);
 
   // Merge new settings with existing ones
   const mergedSettings = { ...currentSettings, ...newSettings };
+  for (const k of LEGACY_SETTINGS) delete mergedSettings[k];
   store.set('settings', mergedSettings);
 
   // Re-initialize AI if configuration changed
@@ -752,6 +769,45 @@ ipcMain.handle('save-settings', (_event, newSettings) => {
 
   console.log('[DVSC] Settings saved.');
   return { success: true };
+});
+
+// ─────────────────────────────────────────────────────────────
+// IPC Handlers — MCP servers
+// ─────────────────────────────────────────────────────────────
+
+ipcMain.handle('mcp-get-config', () => ({ path: mcp.configPath, text: mcp.readConfigText(), status: mcp.status() }));
+
+ipcMain.handle('mcp-save-config', async (_e, text) => {
+  try {
+    await mcp.saveConfigText(String(text || ''));
+    return { success: true, status: mcp.status() };
+  } catch (e) {
+    return { success: false, error: e.message, status: mcp.status() };
+  }
+});
+
+ipcMain.handle('mcp-reconnect', async () => {
+  await mcp.restart();
+  return mcp.status();
+});
+
+ipcMain.handle('mcp-status', () => mcp.status());
+
+ipcMain.handle('ai-provider-info', () => ({
+  active: dvsc && dvsc.isInitialized() ? 'NVIDIA' : null,
+  models: SenjuBrain.DEFAULT_MODELS,
+}));
+
+// Voice input: renderer sends a WAV data URL, Nemotron Omni returns the transcript
+ipcMain.handle('transcribe-audio', async (_e, audioDataUrl, hint) => {
+  try {
+    if (typeof audioDataUrl !== 'string' || !audioDataUrl.startsWith('data:audio/')) throw new Error('Bad audio data');
+    const text = await nvidia.transcribe({ apiKey: nvidiaKey(), audioDataUrl, hint: String(hint || '').slice(0, 300) });
+    return { success: true, text };
+  } catch (e) {
+    console.warn('[SENJU Voice] Transcription failed:', e.message);
+    return { success: false, error: e.message, unauthorized: /invalid|401|403/.test(e.message) };
+  }
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -846,8 +902,8 @@ app.whenReady().then(() => {
 
   attendance = new AttendanceManager(store, timetableManager);
   studyPlanner = new StudyPlanner(store, timetableManager);
-  trains = new TrainAgent(store, { whatsapp, getRapidKey: () => (store.get('settings') || {}).rapidApiKey, getApiKey: () => (store.get('settings') || {}).apiKey });
-  booking = new BookingAgent(store, { getApiKey: () => (store.get('settings') || {}).apiKey });
+  trains = new TrainAgent(store, { whatsapp, getRapidKey: () => (store.get('settings') || {}).rapidApiKey, getApiKey: nvidiaKey });
+  booking = new BookingAgent(store, { getApiKey: nvidiaKey });
 
   // Tools the AI can call (web search, weather, reminders, PC control, WhatsApp, memory)
   toolExecutor = new ToolExecutor({
@@ -861,7 +917,7 @@ app.whenReady().then(() => {
     booking,
     get loudness() { return lazy.loudness; },
     get YouTube() { return lazy.YouTube; },
-    getApiKey: () => store.get('settings').apiKey,
+    getApiKey: nvidiaKey,
     getLocation: () => (dvsc ? dvsc.location : null),
   });
 
@@ -870,11 +926,14 @@ app.whenReady().then(() => {
 
   // Start WhatsApp (headless Chromium) only after the UI has loaded, so it doesn't slow the window
   mainWindow.webContents.once('did-finish-load', () => {
-    setTimeout(() => whatsapp.initWhatsApp(mainWindow), 800);
+    if (!process.env.SENJU_USER_DATA) setTimeout(() => whatsapp.initWhatsApp(mainWindow), 800); // not in tests
   });
 
-  // Initialize Gemini AI if API key exists
+  // Initialize the AI brain if an API key exists
   initializeAI();
+
+  // Connect MCP servers in the background — their tools join the brain as they come up
+  mcp.start().catch((e) => console.error('[MCP] start failed:', e.message));
 
   // Initialize Location
   const currentSettings = store.get('settings', {});
@@ -919,7 +978,7 @@ app.whenReady().then(() => {
 
 function setupSystemTray() {
   // Use SENJU app icon for the tray
-  const iconPath = path.join(__dirname, 'assets', 'senju-icon.ico');
+  const iconPath = APP_ICON;
   const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon.isEmpty() ? nativeImage.createFromPath(process.execPath) : icon);
   
@@ -953,7 +1012,7 @@ app.on('before-quit', (event) => {
   event.preventDefault();
   whatsappClosed = true;
   isQuitting = true;
-  Promise.race([whatsapp.shutdownWhatsApp(), new Promise((r) => setTimeout(r, 4000))])
+  Promise.race([Promise.all([whatsapp.shutdownWhatsApp(), mcp.closeAll()]), new Promise((r) => setTimeout(r, 4000))])
     .finally(() => app.quit());
 });
 

@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "description": "DVSC - Dominance. Vision. Strategy. Control. Your Personal AI Assistant.",
   "main": "main.js",
+  "desktopName": "senju.desktop",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "test": "node test/smoke.js"
   },
   "author": "Vivek",
   "license": "MIT",
@@ -13,6 +15,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@picovoice/porcupine-node": "^4.0.2",
     "@picovoice/pvrecorder-node": "^1.2.9",
     "edge-tts-universal": "^1.4.0",

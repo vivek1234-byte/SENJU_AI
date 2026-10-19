@@ -22,8 +22,9 @@ const PROFILE_DIR = path.join(__dirname, '..', 'booking-profile');
 const LOG_FILE = path.join(__dirname, '..', 'booking-agent.log');
 const IRCTC_URL = 'https://www.irctc.co.in/nget/train-search';
 const MAX_STEPS = 60;
-const STEP_MODEL = 'openai/gpt-oss-120b';
-const STEP_MODEL_FALLBACK = 'openai/gpt-oss-20b';
+const nvidia = require('./nvidia');
+// Bigger model decides clicks; the fast ones are fallbacks
+const STEP_MODELS = ['nvidia/nemotron-3-super-120b-a12b', 'nvidia/nemotron-3.5-lightning-30b-a3b'];
 
 const BERTHS = { LB: 'Lower', MB: 'Middle', UB: 'Upper', SL: 'Side Lower', SU: 'Side Upper', NP: 'No Preference', WS: 'Window Side' };
 
@@ -201,7 +202,7 @@ class BookingAgent {
   notify(title, body) {
     try {
       const { Notification } = require('electron');
-      const n = new Notification({ title, body, icon: path.join(__dirname, '..', 'assets', 'senju-icon.ico') });
+      const n = new Notification({ title, body, icon: require('./platform').APP_ICON });
       n.on('click', () => this.bringToFront());
       n.show();
     } catch (_) { /* ignore */ }
@@ -221,7 +222,7 @@ class BookingAgent {
       throw new Error(`A booking is already in progress (${this.session.message}). Cancel it first or let it finish.`);
     }
     const apiKey = this.deps.getApiKey ? this.deps.getApiKey() : '';
-    if (!apiKey) throw new Error('Groq API key missing — the booking agent needs it to read the page.');
+    if (!apiKey) throw new Error('NVIDIA API key missing — the booking agent needs it to read the page.');
     const travellers = this.resolveTravellers(job.travellers);
     if (!travellers.length) throw new Error('No travellers saved. Add at least one (name, age, gender, berth preference).');
     const mobile = String(job.mobile || (this.store.get('settings') || {}).bookingMobile || '').replace(/\D/g, '');
@@ -413,27 +414,16 @@ Return ONLY JSON: {"action":"click|type|select|press|scroll|wait|done|need_user"
 
     const user = `URL: ${snap.url}\nTITLE: ${snap.title}${snap.modalOpen ? '\nA MODAL/DIALOG IS OPEN — act inside it first.' : ''}\nRECENT ACTIONS:\n${hist}\n\nPAGE TEXT (trimmed):\n${snap.text.slice(0, 1800)}\n\nINTERACTIVE ELEMENTS:\n${elements}`;
 
-    const ask = async (model) => {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 40000);
-      try {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model, temperature: 0, reasoning_effort: 'low', max_tokens: 300,
-            response_format: { type: 'json_object' },
-            messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-          }),
-          signal: ctrl.signal,
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
-        return JSON.parse(data.choices?.[0]?.message?.content || '{}');
-      } finally { clearTimeout(t); }
-    };
-    try { return await ask(STEP_MODEL); }
-    catch (e) { log('decide fallback:', e.message); return ask(STEP_MODEL_FALLBACK); }
+    const reply = await nvidia.quickChat({
+      apiKey,
+      models: STEP_MODELS,
+      maxTokens: 300,
+      temperature: 0,
+      messages: [{ role: 'system', content: `${system}\nReply with ONE JSON object only.` }, { role: 'user', content: user }],
+    });
+    const action = nvidia.parseJSON(reply);
+    if (!action) log('decide: model reply was not JSON:', reply.slice(0, 200));
+    return action || {};
   }
 
   async perform(page, snap, action) {

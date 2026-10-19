@@ -12,7 +12,8 @@
  * user's — IRCTC blocks automated booking and it is not worth the account ban.
  */
 
-const { execFile } = require('child_process');
+const platform = require('./platform');
+const nvidia = require('./nvidia');
 const path = require('path');
 
 // ─────────────────────────────────────────────────────────────
@@ -202,9 +203,7 @@ async function fetchText(url, opts = {}, timeoutMs = 15000) {
 }
 
 function openInBrowser(url) {
-  execFile('cmd.exe', ['/c', 'start', '', url], { windowsHide: true }, (err) => {
-    if (err) console.error('[Trains] open url failed:', err.message);
-  });
+  platform.openExternal(url, 'Trains');
 }
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -542,30 +541,26 @@ class TrainAgent {
     return lines.slice(Math.max(0, i - before), i + after).join('\n').slice(0, maxChars);
   }
 
-  /** Ask Groq (fast small model) to turn scraped text into a fixed JSON shape. */
+  /** Ask a fast Nemotron model to turn scraped text into a fixed JSON shape. */
   async structure(text, instruction) {
     const apiKey = this.deps.getApiKey ? this.deps.getApiKey() : '';
     if (!apiKey) return null;
-    const body = {
-      model: 'openai/gpt-oss-20b',
-      temperature: 0,
-      reasoning_effort: 'low',
-      max_tokens: 900,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: `${instruction}\nReturn ONLY valid JSON. Use null for unknown fields. Never invent values that are not in the text.` },
-        { role: 'user', content: text },
-      ],
-    };
-    const raw = await fetchText('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }, 30000);
     try {
-      const data = JSON.parse(raw);
-      return JSON.parse(data.choices?.[0]?.message?.content || 'null');
-    } catch { return null; }
+      const reply = await nvidia.quickChat({
+        apiKey,
+        maxTokens: 900,
+        temperature: 0,
+        timeoutMs: 30000,
+        messages: [
+          { role: 'system', content: `${instruction}\nReturn ONLY valid JSON. Use null for unknown fields. Never invent values that are not in the text.` },
+          { role: 'user', content: text },
+        ],
+      });
+      return nvidia.parseJSON(reply);
+    } catch (e) {
+      console.warn('[Trains] structure failed:', e.message);
+      return null;
+    }
   }
 
   async pnrStatus(pnr) {
@@ -775,7 +770,7 @@ class TrainAgent {
     const body = `${w.trainNo} ${w.trainName || ''} ${w.from}→${w.to} on ${w.date} (${w.cls}): ${a.text}. Book now!`;
     try {
       const { Notification } = require('electron');
-      const n = new Notification({ title, body, icon: path.join(__dirname, '..', 'assets', 'senju-icon.ico') });
+      const n = new Notification({ title, body, icon: platform.APP_ICON });
       n.on('click', () => { try { this.openBooking({ from: w.from, to: w.to, date: w.date, cls: w.cls, site: 'irctc' }); } catch {} });
       n.show();
     } catch (e) { console.warn('[Trains] notification failed:', e.message); }

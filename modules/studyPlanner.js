@@ -365,7 +365,7 @@ class StudyPlanner {
 
   _notify(title, body) {
     try {
-      const n = new Notification({ title, body, icon: path.join(__dirname, '..', 'assets', 'senju-icon.ico') });
+      const n = new Notification({ title, body, icon: require('./platform').APP_ICON });
       n.on('click', () => { if (this.window && !this.window.isDestroyed()) { this.window.show(); this.window.focus(); } });
       n.show();
     } catch (_) { /* ignore */ }

@@ -222,6 +222,15 @@ contextBridge.exposeInMainWorld('dvsc', {
    * @returns {Promise<Object>} Response with { success }
    */
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
+  getAiProviderInfo: () => ipcRenderer.invoke('ai-provider-info'),
+  // Voice input: WAV data URL → transcript (NVIDIA Nemotron Omni)
+  transcribe: (audioDataUrl, hint) => ipcRenderer.invoke('transcribe-audio', audioDataUrl, hint),
+
+  // MCP servers (tools from external servers the AI can use)
+  mcpGetConfig: () => ipcRenderer.invoke('mcp-get-config'),
+  mcpSaveConfig: (text) => ipcRenderer.invoke('mcp-save-config', text),
+  mcpReconnect: () => ipcRenderer.invoke('mcp-reconnect'),
+  mcpStatus: () => ipcRenderer.invoke('mcp-status'),
 
   // ─────────────────────────────────────────────────────────
   // Notifications

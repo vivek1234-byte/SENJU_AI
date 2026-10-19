@@ -9,17 +9,17 @@
  * whenever the model forgot a brace or a closing tag.
  */
 
-const { exec, execFile } = require('child_process');
+const platform = require('./platform');
 
 // ─────────────────────────────────────────────────────────────
-// Tool schemas (OpenAI / Groq format)
+// Tool schemas (OpenAI function-calling format)
 // ─────────────────────────────────────────────────────────────
 const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
       name: 'web_search',
-      description: 'Search the internet for fresh or factual info: news, scores, prices, people, facts, "who/what/when" questions, anything that may have changed recently. Returns a summarized answer you should then explain in your own words.',
+      description: 'Look up facts about people, places, things, definitions and "who/what/when" questions (DuckDuckGo instant answers + Wikipedia). Not for breaking news or live scores — for those, prefer an MCP search tool if one is available.',
       parameters: {
         type: 'object',
         properties: { query: { type: 'string', description: 'A clear, specific search query in English.' } },
@@ -526,25 +526,8 @@ async function fetchJSON(url, opts = {}, timeoutMs = 12000) {
 }
 
 function openInBrowser(url) {
-  // execFile avoids shell-injection from model-generated text
-  execFile('cmd.exe', ['/c', 'start', '', url], { windowsHide: true }, (err) => {
-    if (err) console.error('[SENJU Tools] open url failed:', err.message);
-  });
+  platform.openExternal(url, 'SENJU Tools');
 }
-
-const APP_MAP = {
-  'google chrome': 'chrome', chrome: 'chrome',
-  'microsoft edge': 'msedge', edge: 'msedge',
-  word: 'winword', 'microsoft word': 'winword',
-  excel: 'excel', 'microsoft excel': 'excel',
-  powerpoint: 'powerpnt', 'microsoft powerpoint': 'powerpnt',
-  vscode: 'code', 'vs code': 'code', 'visual studio code': 'code',
-  calculator: 'calc', calc: 'calc',
-  notepad: 'notepad', paint: 'mspaint',
-  'file explorer': 'explorer', explorer: 'explorer',
-  'task manager': 'taskmgr', cmd: 'cmd', terminal: 'wt',
-  settings: 'ms-settings:', spotify: 'spotify:', whatsapp: 'whatsapp:',
-};
 
 const WMO = {
   0: 'clear sky', 1: 'mostly clear', 2: 'partly cloudy', 3: 'overcast', 45: 'fog', 48: 'fog',
@@ -562,12 +545,9 @@ async function runSystemCommand(cmd, deps) {
   if (cmd.action === 'open_app') {
     const raw = String(cmd.target || '').toLowerCase().replace(/_/g, ' ').trim();
     if (!raw) throw new Error('No app specified');
-    const mapped = APP_MAP[raw] || raw.replace(/\s+/g, '');
     // Allow only safe characters — the name comes from the model
-    if (!/^[a-z0-9._:-]+$/i.test(mapped)) throw new Error(`Unsafe app name: ${raw}`);
-    execFile('cmd.exe', ['/c', 'start', '', mapped], { windowsHide: true }, (err) => {
-      if (err) console.error(`[SENJU Tools] open_app ${mapped} failed:`, err.message);
-    });
+    if (!/^[a-z0-9 ._:-]+$/i.test(raw)) throw new Error(`Unsafe app name: ${raw}`);
+    if (!platform.openApp(raw, 'SENJU Tools')) throw new Error(`Couldn't find an app called "${raw}" on this PC`);
     return `Opening ${raw}.`;
   }
 
@@ -615,12 +595,12 @@ async function runSystemCommand(cmd, deps) {
   }
 
   if (cmd.action === 'shutdown') {
-    exec('shutdown /s /t 60', (err) => err && console.error('[SENJU Tools] shutdown failed:', err.message));
+    platform.scheduleShutdown((err) => err && console.error('[SENJU Tools] shutdown failed:', err.message));
     return 'Shutdown scheduled in 60 seconds. Say "cancel shutdown" to stop it.';
   }
 
   if (cmd.action === 'cancel_shutdown') {
-    exec('shutdown /a', () => {});
+    platform.cancelShutdown(() => {});
     return 'Shutdown cancelled.';
   }
 
@@ -897,39 +877,46 @@ class ToolExecutor {
     }
   }
 
-  /** Web search using Groq's built-in browser_search tool (gpt-oss models). */
+  /**
+   * Keyless lookup: DuckDuckGo Instant Answer API + Wikipedia (both official, free).
+   * Good for facts, people, places, definitions. For live news/scores the brain is
+   * told to prefer a search MCP server (Brave, Tavily, …) when one is connected.
+   */
   async webSearch(query) {
-    const apiKey = this.deps.getApiKey();
-    const ask = async (model) => {
-      const data = await fetchJSON('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: `Today is ${new Date().toDateString()}. Search the web and answer factually in under 150 words, with key numbers, dates and the source site names.` },
-            { role: 'user', content: query },
-          ],
-          tools: [{ type: 'browser_search' }],
-          tool_choice: 'required',
-          temperature: 1,
-          reasoning_effort: 'low',
-          max_tokens: 900,
-        }),
-      }, 45000);
-      return (data.choices?.[0]?.message?.content || '').trim();
-    };
+    const q = String(query || '').trim();
+    if (!q) return 'No query given.';
+    const out = [];
+    const ua = { headers: { 'User-Agent': 'SENJU/1.0 (personal assistant)' } };
 
-    try {
-      return (await ask('openai/gpt-oss-120b')) || 'No results.';
-    } catch (e) {
-      console.warn('[SENJU Tools] browser search on 120b failed:', e.message);
-      try {
-        return (await ask('openai/gpt-oss-20b')) || 'No results.';
-      } catch (e2) {
-        return `Web search unavailable right now (${String(e2.message).slice(0, 120)}). Answer from what you know and say it may be outdated.`;
+    const [ddg, wiki] = await Promise.allSettled([
+      fetchJSON(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`, ua, 12000),
+      fetchJSON(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=3&format=json&origin=*`, ua, 12000),
+    ]);
+
+    if (ddg.status === 'fulfilled') {
+      const d = ddg.value || {};
+      if (d.Answer) out.push(`Answer: ${d.Answer}`);
+      if (d.AbstractText) out.push(`${d.Heading || 'Summary'}: ${d.AbstractText} (${d.AbstractSource || 'DuckDuckGo'})`);
+      if (d.Definition) out.push(`Definition: ${d.Definition}`);
+      for (const t of (d.RelatedTopics || []).filter((x) => x.Text).slice(0, 3)) out.push(`- ${t.Text}`);
+    }
+
+    if (wiki.status === 'fulfilled') {
+      const hits = wiki.value?.query?.search || [];
+      if (hits.length) {
+        try {
+          const top = await fetchJSON(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(hits[0].title.replace(/ /g, '_'))}`, ua, 12000);
+          if (top.extract) out.push(`Wikipedia — ${top.title}: ${top.extract}`);
+        } catch (_) { /* summary optional */ }
+        const others = hits.slice(1).map((h) => h.title).join(', ');
+        if (others) out.push(`Related Wikipedia pages: ${others}`);
       }
     }
+
+    if (!out.length) {
+      return 'No instant answer found. If this needs live info (news, scores, prices), say you can\'t check it right now and suggest adding a search MCP server in Settings.';
+    }
+    return `${out.join('\n')}\n(Sources are encyclopedic — may not reflect events from the last few days.)`.slice(0, 3500);
   }
 
   /** Weather via Open-Meteo (free, no key). */
