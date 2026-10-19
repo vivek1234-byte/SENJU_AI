@@ -1,37 +1,80 @@
 const os = require('os');
 const { TOOL_DEFINITIONS } = require('./tools');
+const { CHAT_URL, stripThinking } = require('./nvidia');
 
 /**
- * SENJU Brain (Groq)
- * ------------------
- * - Stronger default model with automatic fallback on rate limits / errors
+ * SENJU Brain (NVIDIA Nemotron)
+ * -----------------------------
+ * - Nemotron model chain with automatic fallback on rate limits / errors
  * - Native tool calling (web search, weather, reminders, PC control, WhatsApp, memory)
+ * - Plus any tools from the user's MCP servers (modules/mcp.js)
  * - Long-term memory of facts about Vivek, injected into every conversation
  * - Fresh date/time/location context in the system prompt (not polluting history)
  */
 
-// Tried in order. gpt-oss-120b = best reasoning + tool use on Groq; others are fallbacks.
-// Groq retired the Llama models (llama-3.1-8b-instant / llama-3.3-70b-versatile) in Aug 2026.
+// Tried in order (build.nvidia.com API catalog)
 const DEFAULT_MODELS = [
-  'openai/gpt-oss-120b',
-  'openai/gpt-oss-20b',
-  'qwen/qwen3.8-27b',
-  'minimaxai/minimax-m2.7',
+  'nvidia/nemotron-3-ultra-550b-a55b',
+  'nvidia/nemotron-3-super-120b-a12b',
+  'nvidia/nemotron-3.5-lightning-30b-a3b',
+  'nvidia/nemotron-3.5-super-vl-120b-a12b',
 ];
-// Old ids that now return 404 — silently mapped to a live model
-const RETIRED = {
-  'llama-3.1-8b-instant': 'openai/gpt-oss-20b',
-  'llama-3.3-70b-versatile': 'openai/gpt-oss-120b',
-  'groq/compound': 'openai/gpt-oss-120b',
-  'groq/compound-mini': 'openai/gpt-oss-20b',
-};
+
+const STREAM_IDLE_MS = 60000;   // abort only if the stream goes silent this long
+const STREAM_TOTAL_MS = 240000; // hard cap for one model call (thinking can take a while)
+
+/**
+ * Read an OpenAI-style SSE stream into one assistant message.
+ * reasoning_content (the model's thinking) is collected separately and never spoken.
+ */
+async function readStream(res, ctrl) {
+  const msg = { role: 'assistant', content: '', reasoning: '', tool_calls: [] };
+  const decoder = new TextDecoder();
+  let buf = '';
+  let idle = setTimeout(() => ctrl.abort(), STREAM_IDLE_MS);
+  try {
+    for await (const chunk of res.body) {
+      clearTimeout(idle);
+      idle = setTimeout(() => ctrl.abort(), STREAM_IDLE_MS);
+      buf += decoder.decode(chunk, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') continue;
+        let evt;
+        try { evt = JSON.parse(data); } catch (_) { continue; }
+        if (evt.error) throw Object.assign(new Error(evt.error.message || JSON.stringify(evt.error)), { status: evt.error.code });
+        const delta = evt.choices && evt.choices[0] && evt.choices[0].delta;
+        if (!delta) continue;
+        if (delta.reasoning_content) msg.reasoning += delta.reasoning_content;
+        if (delta.content) msg.content += delta.content;
+        for (const tc of delta.tool_calls || []) {
+          const i = tc.index ?? msg.tool_calls.length;
+          const slot = msg.tool_calls[i] || (msg.tool_calls[i] = { id: '', type: 'function', function: { name: '', arguments: '' } });
+          if (tc.id) slot.id = tc.id;
+          if (tc.function && tc.function.name) slot.function.name += tc.function.name;
+          if (tc.function && tc.function.arguments) slot.function.arguments += tc.function.arguments;
+        }
+      }
+    }
+  } finally {
+    clearTimeout(idle);
+  }
+  msg.tool_calls = msg.tool_calls.filter((t) => t && t.function.name);
+  msg.tool_calls.forEach((t, i) => { if (!t.id) t.id = `call_${Date.now()}_${i}`; });
+  if (!msg.tool_calls.length) delete msg.tool_calls;
+  return msg;
+}
 
 const MAX_TOOL_ROUNDS = 5;
 const HISTORY_LIMIT = 30; // messages kept in the live context
 
 const PERSONA = `
 You are SENJU — Vivek's personal AI assistant with a warm, witty, confident female personality.
-You live on Vivek's Windows PC and can actually DO things through your tools.
+You live on Vivek's PC and can actually DO things through your tools.
 
 ## Voice & style
 - Speak natural Roman-script Hinglish, like a sharp desi best friend ("Arre Vivek, ho gaya!", "Sun, main batati hu").
@@ -41,8 +84,13 @@ You live on Vivek's Windows PC and can actually DO things through your tools.
   No markdown tables, no long bullet lists, minimal emojis.
 - If Vivek writes in plain English, you may reply mostly in English with a light Hinglish touch.
 
+## Hard rules (most important)
+- You have NO live knowledge. Weather, news, Vivek's files, reminders, timetable, attendance, exams, trains, WhatsApp — anything about these MUST come from a tool you call in this turn.
+- Never state a number (temperature, %, fare, time, score, count) unless a tool result in this turn gave it to you. If no tool can get it, say so.
+- If a tool fits the request, call it FIRST, then answer from its result.
+
 ## How to think
-- Be genuinely useful and accurate. If you don't know something current (news, prices, scores, dates, facts that change), call web_search — never guess or invent.
+- Be genuinely useful and accurate. For facts, call web_search. For live news, prices or scores, use an MCP search/fetch tool if one is available; if none is, say you can't check live info right now — never guess or invent.
 - For weather questions, call get_weather.
 - For "aaj kya plan hai / schedule", check get_timetable, list_reminders and get_study_plan.
 - Attendance: when Vivek mentions attending/bunking a class, call mark_attendance right away and tell him the new %. If a subject falls below target, warn him in one short line.
@@ -55,17 +103,15 @@ You live on Vivek's Windows PC and can actually DO things through your tools.
 - When a tool fails, tell Vivek plainly what went wrong and what he can do.
 - After an action succeeds, confirm in a few words ("Chrome khol diya ✅"). Don't narrate tool names or JSON.
 - Proactively call remember_fact when Vivek shares lasting info about himself (likes, goals, exam dates, people, routines). Use what you remember naturally, without saying "according to my memory".
+- Tools whose names start with "mcp_" come from Vivek's MCP servers (files, GitHub, browser, etc.). Use them whenever they fit the request, and summarise their output briefly.
 - You can be playful, but be honest: if Vivek's plan has a problem, say so kindly.
 `.trim();
 
-function isGptOss(model) {
-  return model.startsWith('openai/gpt-oss');
-}
-
-class DVSCGroq {
+class SenjuBrain {
   constructor() {
     this.apiKey = null;
     this.models = [...DEFAULT_MODELS];
+    this.mcp = null;         // McpManager
     this.history = [];       // [{role:'user'|'assistant', content}]
     this.location = null;
     this.tools = null;       // ToolExecutor
@@ -77,16 +123,12 @@ class DVSCGroq {
       throw new Error('A valid API key is required to initialize SENJU.');
     }
     this.apiKey = apiKey.trim();
-    let preferred = opts.model && typeof opts.model === 'string' ? opts.model.trim() : '';
-    if (RETIRED[preferred]) {
-      console.warn(`[SENJU Brain] ${preferred} was retired by Groq → using ${RETIRED[preferred]}`);
-      preferred = RETIRED[preferred];
-    }
-    if (preferred) {
-      this.models = [preferred, ...DEFAULT_MODELS.filter((m) => m !== preferred)];
-    }
+    const preferred = opts.model && typeof opts.model === 'string' ? opts.model.trim() : '';
+    this.models = preferred ? [preferred, ...DEFAULT_MODELS.filter((m) => m !== preferred)] : [...DEFAULT_MODELS];
+    this.thinking = opts.thinking !== false; // deep thinking on by default
     this.dead = new Set();
-    console.log('[SENJU Brain] Initialized. Model chain:', this.models.join(' → '));
+    this.noThinkFlag = new Set(); // models that reject chat_template_kwargs
+    console.log(`[SENJU Brain] NVIDIA initialized (thinking ${this.thinking ? 'on' : 'off'}). Model chain:`, this.models.join(' → '));
   }
 
   isInitialized() {
@@ -95,6 +137,15 @@ class DVSCGroq {
 
   setTools(executor) {
     this.tools = executor;
+  }
+
+  setMcp(manager) {
+    this.mcp = manager;
+  }
+
+  _toolDefinitions() {
+    const mcpTools = this.mcp ? this.mcp.getToolDefinitions() : [];
+    return [...TOOL_DEFINITIONS, ...mcpTools];
   }
 
   setLocation(locationString) {
@@ -142,41 +193,60 @@ ${this.location ? `- Location: ${this.location}` : '- Location: unknown'}
 ${memBlock}`;
   }
 
-  async _callAPI(messages, { useTools = true, maxTokens = 1024 } = {}) {
+  async _callAPI(messages, { useTools = true, maxTokens, think } = {}) {
+    const wantThinking = think ?? this.thinking;
     let lastErr;
     this.cooldown = this.cooldown || {};
     this.dead = this.dead || new Set();
     const now = Date.now();
     const available = this.models.filter((m) => !this.dead.has(m) && !(this.cooldown[m] > now));
     for (const model of (available.length ? available : this.models)) {
+      const thinking = wantThinking && !this.noThinkFlag.has(model);
       const body = {
         model,
         messages,
-        temperature: 0.6,
-        max_tokens: maxTokens,
+        stream: true,
+        // NVIDIA's recommended sampling for thinking mode; steadier settings without it
+        temperature: thinking ? 1 : 0.6,
+        top_p: 0.95,
+        max_tokens: maxTokens || (thinking ? 16384 : 1024),
       };
       if (useTools && this.tools) {
-        body.tools = TOOL_DEFINITIONS;
+        body.tools = this._toolDefinitions();
         body.tool_choice = 'auto';
       }
-      if (isGptOss(model)) body.reasoning_effort = 'low'; // keep it snappy for voice
+      if (!this.noThinkFlag.has(model)) {
+        body.chat_template_kwargs = { enable_thinking: !!wantThinking };
+      }
 
       try {
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 45000);
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal: ctrl.signal,
-        }).finally(() => clearTimeout(timer));
+        const timer = setTimeout(() => ctrl.abort(), STREAM_TOTAL_MS);
+        let res;
+        try {
+          res = await fetch(CHAT_URL, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+            body: JSON.stringify(body),
+            signal: ctrl.signal,
+          });
+        } catch (e) {
+          clearTimeout(timer);
+          throw e;
+        }
 
         if (!res.ok) {
           const text = await res.text();
-          const err = new Error(`Groq ${model} (${res.status}): ${text.slice(0, 300)}`);
+          const err = new Error(`NVIDIA ${model} (${res.status}): ${text.slice(0, 300)}`);
           err.status = res.status;
+          // Model doesn't take the thinking switch → retry it once without
+          if (res.status === 400 && body.chat_template_kwargs && /chat_template|enable_thinking|extra/i.test(text)) {
+            this.noThinkFlag.add(model);
+            return this._callAPI(messages, { useTools, maxTokens, think });
+          }
+          clearTimeout(timer);
           // Bad key → no point trying other models
-          if (res.status === 401) throw Object.assign(err, { fatal: true });
+          if (res.status === 401 || res.status === 403) throw Object.assign(err, { fatal: true });
           // Model retired / not available on this account → never ask for it again
           if (res.status === 404 || /model_not_found|does not exist|decommissioned/i.test(text)) {
             this.dead.add(model);
@@ -184,11 +254,15 @@ ${memBlock}`;
           }
           throw err;
         }
-        const data = await res.json();
+        const msg = await readStream(res, ctrl).finally(() => clearTimeout(timer));
         this.lastModelUsed = model;
-        return data.choices[0].message;
+        this.lastReasoning = msg.reasoning;
+        delete msg.reasoning; // thinking stays out of history and out of speech
+        msg.content = stripThinking(msg.content);
+        if (!msg.content && !msg.tool_calls) throw new Error(`${model} returned an empty reply`);
+        return msg;
       } catch (e) {
-        if (e.fatal) throw new Error('Groq API key is invalid. Please update it in Settings.');
+        if (e.fatal) throw new Error(`NVIDIA API key is invalid or has no access. Please update it in Settings.`);
         console.warn(`[SENJU Brain] ${model} failed → trying next.`, e.message);
         // Rate-limited: skip this model for a minute so replies stay fast
         if (e.status === 429) this.cooldown[model] = Date.now() + 60000;
@@ -196,7 +270,7 @@ ${memBlock}`;
       }
     }
     if (this.dead.size && this.dead.size >= this.models.length) {
-      throw new Error('None of the configured Groq models are available on this key. Check console.groq.com/docs/models and set settings.aiModel.');
+      throw new Error(`None of the configured NVIDIA models are available on this key. Pick another model in Settings.`);
     }
     throw lastErr || new Error('All models failed.');
   }
@@ -207,7 +281,7 @@ ${memBlock}`;
    */
   async sendMessage(message) {
     if (!this.isInitialized()) {
-      throw new Error('SENJU is not initialized. Please set your Groq API key in Settings.');
+      throw new Error('SENJU is not initialized. Please add your NVIDIA API key in Settings.');
     }
 
     const ctx = { refresh: new Set() };
@@ -240,7 +314,9 @@ ${memBlock}`;
         let result, ok = true;
         try {
           console.log(`[SENJU Brain] Tool → ${name}`, args);
-          result = await this.tools.execute(name, args, ctx);
+          result = this.mcp && this.mcp.has(name)
+            ? await this.mcp.call(name, args)
+            : await this.tools.execute(name, args, ctx);
         } catch (e) {
           ok = false;
           result = `ERROR: ${e.message}`;
@@ -270,7 +346,7 @@ ${memBlock}`;
       const msg = await this._callAPI([
         { role: 'system', content: this._systemPrompt() },
         { role: 'user', content: `[SYSTEM: Vivek just opened the app. It's ${timeOfDay}. Give a warm, natural 1–2 sentence Hinglish greeting suited to the time. If you remember something relevant about him (a goal, an upcoming event), weave it in briefly. Ask what's the plan.]` },
-      ], { useTools: false, maxTokens: 300 });
+      ], { useTools: false, maxTokens: 300, think: false }); // greeting: fast, no thinking
       return (msg.content || '').trim() || 'Hello Vivek! SENJU ready hai. Aaj kya karna hai?';
     } catch (error) {
       console.error('[SENJU Brain] Greeting failed:', error.message);
@@ -279,4 +355,5 @@ ${memBlock}`;
   }
 }
 
-module.exports = DVSCGroq;
+module.exports = SenjuBrain;
+module.exports.DEFAULT_MODELS = DEFAULT_MODELS;

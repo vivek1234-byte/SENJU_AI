@@ -6,6 +6,43 @@
 window.addEventListener('error', (e) => console.error('[Renderer error]', e.message, e.filename + ':' + e.lineno));
 window.addEventListener('unhandledrejection', (e) => console.error('[Renderer rejection]', e.reason && (e.reason.stack || e.reason.message || e.reason)));
 
+// ── Voice → text (NVIDIA Nemotron Omni, via main process) ──
+// MediaRecorder gives webm/opus; the model wants WAV, so decode + resample to 16 kHz mono PCM.
+async function blobToWavDataUrl(blob) {
+  const ctx = new AudioContext();
+  let decoded;
+  try { decoded = await ctx.decodeAudioData(await blob.arrayBuffer()); } finally { ctx.close(); }
+  const rate = 16000;
+  const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
+  const src = off.createBufferSource();
+  src.buffer = decoded;
+  src.connect(off.destination);
+  src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+
+  const view = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) view.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); view.setUint32(4, 36 + pcm.length * 2, true); str(8, 'WAVE');
+  str(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  str(36, 'data'); view.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) {
+    const v = Math.max(-1, Math.min(1, pcm[i]));
+    view.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+  }
+  const bytes = new Uint8Array(view.buffer);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return 'data:audio/wav;base64,' + btoa(bin);
+}
+
+/** Returns the transcript (Roman-script Hinglish). Throws with .unauthorized on a bad key. */
+async function transcribeBlob(blob, hint) {
+  const res = await window.dvsc.transcribe(await blobToWavDataUrl(blob), hint || '');
+  if (!res.success) throw Object.assign(new Error(res.error), { unauthorized: res.unauthorized });
+  return (res.text || '').trim();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Check if dvsc API is available
   if (!window.dvsc) {
@@ -64,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function prefetchGreeting() {
     try {
       settings = await window.dvsc.getSettings();
-      if (!settings.apiKey) return;
+      if (!settings.nvidiaApiKey) return;
 
       // Step 1: Get greeting text from Gemini (during boot animation)
       const res = await window.dvsc.getStartupGreeting();
@@ -89,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function initializeApp() {
     // Load Settings (might already be loaded by prefetch)
-    if (!settings.apiKey) {
+    if (!settings.nvidiaApiKey) {
       settings = await window.dvsc.getSettings();
     }
     populateSettingsForm();
@@ -106,13 +143,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Wait for the greeting that started during boot (no second API call)
-    if (settings.apiKey && !preloadedGreeting && greetingPromise) {
+    if (settings.nvidiaApiKey && !preloadedGreeting && greetingPromise) {
       await greetingPromise;
     }
 
     // Check API Key
-    if (!settings.apiKey) {
-      const noKeyMsg = "Vivek, I'm online, but I need an API key to function properly. Please add your Groq API key in Settings.";
+    if (!settings.nvidiaApiKey) {
+      const noKeyMsg = "Vivek, I'm online, but I need an API key to function properly. Please add your NVIDIA API key in Settings.";
       addMessage(noKeyMsg, 'assistant');
       speak(noKeyMsg);
     } else if (preloadedGreeting) {
@@ -329,8 +366,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const text = chatInput.value.trim();
     if (!text) return;
 
-    if (settings.provider !== 'ollama' && !settings.apiKey) {
-      window.dvsc.notify("Error", "Please enter API Key in settings first.");
+    if (!settings.nvidiaApiKey) {
+      window.dvsc.notify("Error", "Please enter your NVIDIA API Key in settings first.");
       return;
     }
 
@@ -374,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // Speech Recognition (Voice Input via Groq Whisper API)
+  // Speech Recognition (Voice Input via NVIDIA Nemotron Omni)
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const voiceBtn = document.getElementById('voice-btn');
   let isRecording = false;
@@ -382,8 +419,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let audioChunks = [];
 
   async function startRecording() {
-    if (!settings.apiKey) {
-      window.dvsc.notify("Error", "Please enter your Groq API Key in settings first.");
+    if (!settings.nvidiaApiKey) {
+      window.dvsc.notify("Error", "Please enter your NVIDIA API Key in settings first.");
       return;
     }
 
@@ -406,47 +443,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
         
         try {
-          const formData = new FormData();
-          formData.append('file', new File([audioBlob], 'audio.webm', { type: 'audio/webm' }));
-          // whisper-large-v3-turbo + language=hi prevents ALL language hallucinations (Spanish/Vietnamese etc)
-          formData.append('model', 'whisper-large-v3-turbo');
-          formData.append('language', 'hi');
-          formData.append('prompt', 'Vivek, Google Chrome kholo. gana chalao. volume badhao. main baitha tha. theek hai yaar.');
-
-          const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${settings.apiKey}` },
-            body: formData
-          });
-
-          if (!response.ok) throw new Error(await response.text());
-
-          const data = await response.json();
-          let rawText = (data.text || '').trim();
+          const rawText = await transcribeBlob(audioBlob, 'Vivek, SENJU, Chrome kholo, gana chalao, volume badhao, theek hai yaar');
           if (!rawText) { chatInput.placeholder = 'Type a message, Vivek...'; return; }
-
-          // Step 2: If Devanagari detected, convert to Roman Hinglish via LLM
-          const hasDevanagari = /[\u0900-\u097F]/.test(rawText);
-          if (hasDevanagari) {
-            chatInput.placeholder = 'Converting to Hinglish...';
-            const llmRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${settings.apiKey}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                model: 'openai/gpt-oss-20b',
-                messages: [{
-                  role: 'user',
-                  content: `Convert this Hindi/Devanagari text to Roman script Hinglish ONLY. Do not translate to English. Keep the same words, just change script. Output ONLY the Roman Hinglish text, nothing else.\n\nInput: ${rawText}`
-                }],
-                temperature: 0,
-                max_tokens: 200
-              })
-            });
-            if (llmRes.ok) {
-              const llmData = await llmRes.json();
-              rawText = (llmData.choices[0].message.content || rawText).trim();
-            }
-          }
 
           chatInput.value = rawText;
           handleSend();
@@ -494,7 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // Background Wake Word Engine (Groq VAD)
+  // Background Wake Word Engine (VAD + Nemotron Omni)
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let backgroundAudioContext = null;
   let backgroundStream = null;
@@ -520,7 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function startBackgroundListening() {
-    if (!settings.apiKey || isBackgroundListening) return;
+    if (!settings.nvidiaApiKey || isBackgroundListening) return;
     
     try {
       backgroundStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -606,40 +604,25 @@ document.addEventListener('DOMContentLoaded', () => {
     
     backgroundMediaRecorder.onstop = async () => {
       const audioBlob = new Blob(bgAudioChunks, { type: 'audio/webm' });
-      console.log('[DVSC Background] Speech ended. Sending to Groq to check Wake Word...');
+      console.log('[DVSC Background] Speech ended. Checking for the wake word...');
       
       try {
-        const formData = new FormData();
-        formData.append('file', new File([audioBlob], 'audio.webm', { type: 'audio/webm' }));
-        formData.append('model', 'whisper-large-v3-turbo');
-        // No language param = auto-detect. Roman Hinglish prompt forces Roman script output.
-        formData.append('prompt', 'utho senju, jarvis, kaam karte hain, wake up, Chrome kholo, gana chalao, haan theek hai yaar.');
-
-        const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${settings.apiKey}` },
-          body: formData
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const text = (data.text || '').toLowerCase();
-          console.log('[DVSC Background] Heard:', text);
-          
-          if (
-            text.includes('utho') || text.includes('à¤‰à¤ à¥‹') || 
-            text.includes('dvsc') || text.includes('à¤¡à¥€à¤µà¥€à¤à¤¸à¤¸à¥€') || text.includes('d.v.s.c') ||
-            text.includes('jarvis') || text.includes('à¤œà¤¾à¤°à¥à¤µà¤¿à¤¸') ||
-            text.includes('kaam karte hain') || text.includes('à¤•à¤¾à¤® à¤•à¤°à¤¤à¥‡ à¤¹à¥ˆà¤‚') ||
-            text.includes('wake up') || text.includes('get up')
-          ) {
-            console.log('[DVSC Background] Wake word matched! Waking up...');
-            window.dvsc.show(); // Popup the window
-            // Optionally, pre-fill the chat input or start recording immediately:
-            setTimeout(() => {
-              if (!isRecording) startRecording();
-            }, 500);
-          }
+        const text = (await transcribeBlob(audioBlob, 'utho senju, jarvis, kaam karte hain, wake up')).toLowerCase();
+        console.log('[DVSC Background] Heard:', text);
+        
+        if (
+          text.includes('utho') || text.includes('à¤‰à¤ à¥‹') || 
+          text.includes('dvsc') || text.includes('à¤¡à¥€à¤µà¥€à¤à¤¸à¤¸à¥€') || text.includes('d.v.s.c') ||
+          text.includes('jarvis') || text.includes('à¤œà¤¾à¤°à¥à¤µà¤¿à¤¸') ||
+          text.includes('kaam karte hain') || text.includes('à¤•à¤¾à¤® à¤•à¤°à¤¤à¥‡ à¤¹à¥ˆà¤‚') ||
+          text.includes('wake up') || text.includes('get up')
+        ) {
+          console.log('[DVSC Background] Wake word matched! Waking up...');
+          window.dvsc.show(); // Popup the window
+          // Optionally, pre-fill the chat input or start recording immediately:
+          setTimeout(() => {
+            if (!isRecording) startRecording();
+          }, 500);
         }
       } catch (e) {
         console.error('Background transcription error:', e);
@@ -1113,19 +1096,38 @@ document.addEventListener('DOMContentLoaded', () => {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Settings Logic
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const settingsGroqBlock = document.getElementById('settings-groq-block');
-      
-  const settingsApikey = document.getElementById('settings-apikey');
-  const toggleApikeyBtn = document.getElementById('toggle-apikey');
-  
   const settingsVoice = document.getElementById('settings-voice');
   const settingsLocation = document.getElementById('settings-location');
   const saveSettingsBtn = document.getElementById('save-settings-btn');
   const restartAppBtn = document.getElementById('restart-app-btn');
   const clearChatBtn = document.getElementById('clear-chat-btn');
 
+  const settingsNvidiaKey = document.getElementById('settings-nvidia-key');
+  const settingsNvidiaModel = document.getElementById('settings-nvidia-model');
+
+  async function refreshProviderInfo() {
+    try {
+      const info = await window.dvsc.getAiProviderInfo();
+      const current = settings.nvidiaModel || info.models[0];
+      const models = info.models.includes(current) ? info.models : [current, ...info.models];
+      settingsNvidiaModel.innerHTML = '';
+      for (const m of models) {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m.replace(/^nvidia\//, '');
+        settingsNvidiaModel.appendChild(opt);
+      }
+      settingsNvidiaModel.value = current;
+      document.getElementById('settings-provider-active').textContent =
+        info.active ? 'Brain active ✅' : 'No brain active yet — paste your key and save.';
+    } catch (_) { /* older main process */ }
+  }
+
   function populateSettingsForm() {
-                settingsApikey.value = settings.apiKey || '';
+    settingsNvidiaKey.value = settings.nvidiaApiKey || '';
+    document.getElementById('settings-nvidia-thinking').checked = settings.nvidiaThinking !== false;
+    refreshProviderInfo();
+    loadMcpConfig();
     settingsVoice.checked = settings.voiceEnabled;
     settingsLocation.checked = settings.locationEnabled;
     document.getElementById('settings-class-alerts').checked = settings.classAlertsEnabled !== false;
@@ -1143,29 +1145,91 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  toggleApikeyBtn.addEventListener('click', () => {
-    if (settingsApikey.type === 'password') {
-      settingsApikey.type = 'text';
-      toggleApikeyBtn.textContent = 'Hide';
-    } else {
-      settingsApikey.type = 'password';
-      toggleApikeyBtn.textContent = 'Show';
+  document.getElementById('toggle-nvidia-key').addEventListener('click', (e) => {
+    settingsNvidiaKey.type = settingsNvidiaKey.type === 'password' ? 'text' : 'password';
+    e.target.textContent = settingsNvidiaKey.type === 'password' ? 'Show' : 'Hide';
+  });
+
+  // ── MCP servers ──
+  const mcpConfigEl = document.getElementById('mcp-config');
+  const mcpStatusEl = document.getElementById('mcp-status');
+
+  function renderMcpStatus(list) {
+    mcpStatusEl.innerHTML = '';
+    if (!list || !list.length) {
+      mcpStatusEl.innerHTML = '<div class="empty-hint">No MCP servers configured yet.</div>';
+      return;
     }
+    const icons = { connected: '🟢', connecting: '🟡', disabled: '⚪', error: '🔴', closed: '⚪' };
+    for (const srv of list) {
+      const row = document.createElement('div');
+      row.className = 'empty-hint';
+      const detail = srv.state === 'connected'
+        ? `${srv.tools.length} tools${srv.tools.length ? ': ' + srv.tools.slice(0, 8).join(', ') + (srv.tools.length > 8 ? '…' : '') : ''}`
+        : srv.state === 'error' ? srv.error : srv.state;
+      row.textContent = `${icons[srv.state] || '⚪'} ${srv.name} — ${detail}`;
+      mcpStatusEl.appendChild(row);
+    }
+  }
+
+  async function loadMcpConfig() {
+    try {
+      const cfg = await window.dvsc.mcpGetConfig();
+      mcpConfigEl.value = cfg.text;
+      document.getElementById('mcp-config-path').textContent = `Saved in ${cfg.path}. Set "disabled": true to turn a server off.`;
+      renderMcpStatus(cfg.status);
+    } catch (e) {
+      mcpStatusEl.textContent = 'MCP unavailable: ' + e.message;
+    }
+  }
+
+  document.getElementById('mcp-save-btn').addEventListener('click', async (e) => {
+    const btn = e.target;
+    btn.disabled = true;
+    btn.textContent = 'Connecting…';
+    mcpStatusEl.innerHTML = '<div class="empty-hint">🟡 Connecting to servers…</div>';
+    try {
+      const res = await window.dvsc.mcpSaveConfig(mcpConfigEl.value);
+      if (!res.success) {
+        mcpStatusEl.innerHTML = '';
+        const err = document.createElement('div');
+        err.className = 'empty-hint';
+        err.textContent = '🔴 ' + res.error;
+        mcpStatusEl.appendChild(err);
+      } else {
+        renderMcpStatus(res.status);
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save & connect';
+    }
+  });
+
+  document.getElementById('mcp-reconnect-btn').addEventListener('click', async () => {
+    mcpStatusEl.innerHTML = '<div class="empty-hint">🟡 Reconnecting…</div>';
+    renderMcpStatus(await window.dvsc.mcpReconnect());
   });
 
   saveSettingsBtn.addEventListener('click', async () => {
     const newSettings = {
       ...settings,
-      apiKey: settingsApikey.value.trim(),
-            voiceEnabled: settingsVoice.checked,
+      nvidiaApiKey: settingsNvidiaKey.value.trim(),
+      nvidiaModel: settingsNvidiaModel.value,
+      nvidiaThinking: document.getElementById('settings-nvidia-thinking').checked,
+      voiceEnabled: settingsVoice.checked,
       locationEnabled: settingsLocation.checked,
       classAlertsEnabled: document.getElementById('settings-class-alerts').checked,
       classAlertMinutes: Math.min(120, Math.max(1, parseInt(document.getElementById('settings-class-alert-minutes').value, 10) || 15)),
       rapidApiKey: (document.getElementById('settings-rapidapi') || {}).value ? document.getElementById('settings-rapidapi').value.trim() : '',
     };
     
-    await window.dvsc.saveSettings(newSettings);
+    const saved = await window.dvsc.saveSettings(newSettings);
     settings = newSettings;
+    refreshProviderInfo();
+    if (saved && saved.success === false) {
+      addMessage('Settings saved, but the AI brain failed to start: ' + saved.error, 'assistant');
+      return;
+    }
     
     if (settings.locationEnabled) {
       requestPreciseLocation();
@@ -2476,39 +2540,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (blob.size < 4000) return;   // too small to contain speech
     try {
       var storedSettings = await window.dvsc.getSettings();
-      var apiKey = storedSettings && storedSettings.apiKey;
-      if (!apiKey) {
-        setResponse('Groq API key missing — add it in Settings.');
+      if (!storedSettings || !storedSettings.nvidiaApiKey) {
+        setResponse('NVIDIA API key missing — add it in Settings.');
         setStatus('ERROR', 'jvoice-idle');
         return;
       }
 
-      var formData = new FormData();
-      formData.append('file', new File([blob], 'voice.webm', { type: 'audio/webm' }));
-      formData.append('model', 'whisper-large-v3-turbo');
-      formData.append('temperature', '0');
-      formData.append('prompt', 'Vivek, SENJU. Hinglish commands: chrome kholo, gana chalao, volume badhao, attendance kitni hai, aaj kya padhna hai, WhatsApp message bhejo.');
-
-      var ctrl = new AbortController();
-      var t = setTimeout(function () { ctrl.abort(); }, 20000);
-      var res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + apiKey },
-        body: formData,
-        signal: ctrl.signal,
-      });
-      clearTimeout(t);
-
-      if (!res.ok) {
-        var errTxt = await res.text();
-        console.warn('[SENJU] Transcription failed:', res.status, errTxt);
-        setResponse(res.status === 401 ? 'API key galat hai, Vivek.' : 'Sun nahi paayi — phir se bolo.');
+      var text;
+      try {
+        text = await transcribeBlob(blob, 'Vivek, SENJU, chrome kholo, gana chalao, volume badhao, attendance kitni hai, aaj kya padhna hai, WhatsApp message bhejo');
+      } catch (err) {
+        console.warn('[SENJU] Transcription failed:', err.message);
+        setResponse(err.unauthorized ? 'API key galat hai, Vivek.' : 'Sun nahi paayi — phir se bolo.');
         setStatus('LISTENING', 'jvoice-listening');
         return;
       }
-
-      var data = await res.json();
-      var text = (data.text || '').trim();
       if (text.length < 3) { setStatus('LISTENING', 'jvoice-listening'); return; }
 
       var lower = text.toLowerCase();

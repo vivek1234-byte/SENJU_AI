@@ -279,16 +279,39 @@
               
               
 
-              <div id="settings-groq-block" class="form-group" style="margin-top: 15px;">
-                <label>Groq API Key</label>
+              <div id="settings-nvidia-block" class="form-group" style="margin-top: 15px;">
+                <label>NVIDIA API Key</label>
                 <div class="input-with-action">
-                  <input type="password" id="settings-apikey" placeholder="Enter your Groq API key...">
-                  <button id="toggle-apikey" class="btn-ghost">Show</button>
+                  <input type="password" id="settings-nvidia-key" placeholder="nvapi-...">
+                  <button id="toggle-nvidia-key" class="btn-ghost">Show</button>
                 </div>
-                <small>Get your free API key from <a href="https://console.groq.com/keys" target="_blank" id="apikey-link">Groq Cloud</a></small>
+                <small>Get it from <a href="https://build.nvidia.com/settings/api-keys" target="_blank">build.nvidia.com</a> → API Keys.</small>
+                <label style="margin-top: 10px;">Nemotron model</label>
+                <select id="settings-nvidia-model" style="max-width: 420px;"></select>
+                <div class="toggle-group" style="margin-top: 10px;">
+                  <label class="toggle">
+                    <input type="checkbox" id="settings-nvidia-thinking" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span>Deep thinking (smarter tool use, slower replies)</span>
+                </div>
+                <small id="settings-provider-active"></small>
+                <small>Chat, tool use, voice input (Nemotron Omni) and the train/booking agents all run on this key.</small>
               </div>
 
-              
+            </div>
+            <div class="glass-card">
+              <h3>🔌 MCP Servers</h3>
+              <div class="form-group">
+                <label>Servers SENJU can use (same format as Claude Desktop's <code>mcpServers</code>)</label>
+                <textarea id="mcp-config" spellcheck="false" rows="12" style="width: 100%; font-family: monospace; font-size: 12px;"></textarea>
+                <small id="mcp-config-path"></small>
+              </div>
+              <div id="mcp-status" class="form-group"></div>
+              <div class="form-actions" style="margin-top: 0;">
+                <button id="mcp-save-btn" class="btn-primary">Save &amp; connect</button>
+                <button id="mcp-reconnect-btn" class="btn-ghost" style="margin-left: 10px;">Reconnect</button>
+              </div>
             </div>
             <div class="glass-card">
               <h3>🔊 Voice Settings</h3>

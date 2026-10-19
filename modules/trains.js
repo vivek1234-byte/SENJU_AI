@@ -13,6 +13,7 @@
  */
 
 const platform = require('./platform');
+const nvidia = require('./nvidia');
 const path = require('path');
 
 // ─────────────────────────────────────────────────────────────
@@ -540,30 +541,26 @@ class TrainAgent {
     return lines.slice(Math.max(0, i - before), i + after).join('\n').slice(0, maxChars);
   }
 
-  /** Ask Groq (fast small model) to turn scraped text into a fixed JSON shape. */
+  /** Ask a fast Nemotron model to turn scraped text into a fixed JSON shape. */
   async structure(text, instruction) {
     const apiKey = this.deps.getApiKey ? this.deps.getApiKey() : '';
     if (!apiKey) return null;
-    const body = {
-      model: 'openai/gpt-oss-20b',
-      temperature: 0,
-      reasoning_effort: 'low',
-      max_tokens: 900,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: `${instruction}\nReturn ONLY valid JSON. Use null for unknown fields. Never invent values that are not in the text.` },
-        { role: 'user', content: text },
-      ],
-    };
-    const raw = await fetchText('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }, 30000);
     try {
-      const data = JSON.parse(raw);
-      return JSON.parse(data.choices?.[0]?.message?.content || 'null');
-    } catch { return null; }
+      const reply = await nvidia.quickChat({
+        apiKey,
+        maxTokens: 900,
+        temperature: 0,
+        timeoutMs: 30000,
+        messages: [
+          { role: 'system', content: `${instruction}\nReturn ONLY valid JSON. Use null for unknown fields. Never invent values that are not in the text.` },
+          { role: 'user', content: text },
+        ],
+      });
+      return nvidia.parseJSON(reply);
+    } catch (e) {
+      console.warn('[Trains] structure failed:', e.message);
+      return null;
+    }
   }
 
   async pnrStatus(pnr) {

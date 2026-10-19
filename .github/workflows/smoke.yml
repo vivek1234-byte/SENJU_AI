@@ -1,0 +1,30 @@
+name: Smoke test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # package-lock.json is gitignored, so a plain install
+      - run: npm install --no-audit --no-fund
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        run: npm test
+      - name: Smoke test (Linux, virtual display)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb > /dev/null
+          xvfb-run -a npm test

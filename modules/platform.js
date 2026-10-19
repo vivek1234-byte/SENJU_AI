@@ -33,16 +33,37 @@ function launchDetached(cmd, args = []) {
   child.unref();
 }
 
+/** Electron's shell when running inside the app (null in plain Node, e.g. tests). */
+function electronShell() {
+  try {
+    const e = require('electron');
+    return e && typeof e === 'object' && e.shell ? e.shell : null;
+  } catch (_) { return null; }
+}
+
 /** Open a URL (or URI like spotify:) with the system default handler. */
 function openExternal(target, tag = 'SENJU') {
   if (IS_WIN) {
-    // execFile avoids shell-injection from model-generated text
-    execFile('cmd.exe', ['/c', 'start', '', target], { windowsHide: true }, (err) => {
+    // Never hand URLs to cmd.exe: an unquoted "&" in the URL would start a second command
+    const shell = electronShell();
+    if (shell) {
+      shell.openExternal(target).catch((err) => console.error(`[${tag}] open ${target} failed:`, err.message));
+      return;
+    }
+    const escaped = String(target).replace(/[\^&|<>()%!"]/g, '^$&');
+    execFile('cmd.exe', ['/c', 'start', '""', escaped], { windowsHide: true, windowsVerbatimArguments: true }, (err) => {
       if (err) console.error(`[${tag}] open ${target} failed:`, err.message);
     });
     return;
   }
   launchDetached(IS_MAC ? 'open' : 'xdg-open', [target]);
+}
+
+/** Launch a Windows app/URI by name through `start` (names are pre-validated: [a-z0-9._:-]). */
+function winStart(name, tag) {
+  execFile('cmd.exe', ['/c', 'start', '', name], { windowsHide: true }, (err) => {
+    if (err) console.error(`[${tag}] open ${name} failed:`, err.message);
+  });
 }
 
 // Spoken name → candidates. Windows: a `start` target. Linux: binaries tried in order.
@@ -94,7 +115,7 @@ function openApp(name, tag = 'SENJU') {
   const key = String(name).toLowerCase().replace(/_/g, ' ').trim();
   if (IS_WIN) {
     const mapped = WIN_APPS[key] || key.replace(/\s+/g, '');
-    openExternal(mapped, tag);
+    winStart(mapped, tag);
     return true;
   }
   const candidates = LINUX_APPS[key] || [key.replace(/\s+/g, '-'), key.replace(/\s+/g, '')];
